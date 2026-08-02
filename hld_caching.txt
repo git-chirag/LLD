@@ -1,0 +1,613 @@
+Caching & Redis - HLD Interview Notes
+1. Why Cache?
+
+Cache is introduced when:
+
+✅ Read-heavy workload
+✅ Expensive database queries
+✅ High DB CPU utilization
+✅ Low latency requirements
+
+Without cache:
+
+Client
+  |
+App
+  |
+Database
+
+Every request hits DB.
+
+With cache:
+
+Client
+  |
+App
+  |
+Redis
+  |
+Database
+
+Most requests served from Redis.
+
+Benefits:
+
+Reduced DB load
+Lower latency
+Increased throughput
+Better scalability
+2. Where Can We Cache?
+A. Client-side Cache
+
+Stored in:
+
+Browser
+Mobile app
+
+Example:
+
+User Profile
+Static Config
+Feature Flags
+
+Benefits:
+
+Zero server load
+Lowest latency
+
+Examples:
+
+Cache-Control Headers
+ETags
+Local Storage
+B. CDN Cache
+
+Used for:
+
+Images
+Videos
+JS
+CSS
+
+Architecture:
+
+User
+ |
+CDN
+ |
+Origin Server
+
+Examples:
+
+CloudFront
+Akamai
+Cloudflare
+C. Server-side (In-process) Cache
+
+Stored inside application memory.
+
+Example:
+
+HashMap
+Caffeine Cache
+Guava Cache
+
+Architecture:
+
+App Server
+ |
+Local Cache
+ |
+Database
+
+Benefits:
+
+Extremely fast
+
+Problems:
+
+Lost on restart
+Not shared between servers
+D. Distributed Cache (Redis)
+
+Architecture:
+
+App
+ |
+Redis
+ |
+Database
+
+Benefits:
+
+Shared across all servers
+Large capacity
+
+Most common interview answer.
+
+3. Cache Architectures
+
+Very common Amazon topic.
+
+Cache Aside (Lazy Loading)
+
+Most popular.
+
+Read
+Check Cache
+     |
+Hit -> Return
+     |
+Miss
+     |
+DB
+     |
+Store in Cache
+     |
+Return
+
+Example:
+
+user = redis.get(id)
+
+if not user:
+    user = db.get(id)
+    redis.set(id, user)
+Pros
+Simple
+Most commonly used
+Cons
+Cache misses
+Stale data possible
+Write Through
+
+Whenever DB updated:
+
+Write Cache
+      |
+Write DB
+
+Both updated synchronously.
+
+Pros
+Cache always fresh
+Cons
+Higher write latency
+Write Behind (Write Back)
+Write Cache
+      |
+Return Success
+      |
+Async DB Update
+Pros
+Very fast writes
+Cons
+Data loss possible if cache crashes
+
+Used rarely.
+
+Read Through
+App
+ |
+Cache
+ |
+DB
+
+Cache itself fetches from DB on miss.
+
+Application only talks to cache.
+
+Less common.
+
+4. Cache Eviction Policies
+
+Cache memory is limited.
+
+Need eviction.
+
+LRU (Least Recently Used)
+
+Remove least recently accessed key.
+
+A B C D
+
+Access A
+
+B becomes oldest
+
+Most common.
+
+LFU (Least Frequently Used)
+
+Remove key with lowest usage count.
+
+Good for:
+
+Trending content
+Frequently accessed products
+
+Redis supports LFU.
+
+TTL (Time To Live)
+
+Expire key after fixed duration.
+
+UserSession
+TTL = 30 min
+
+Very common.
+
+FIFO
+
+Remove oldest inserted item.
+
+Simple but rarely used.
+
+5. Caching Problems
+A. Thundering Herd Problem
+Scenario
+
+Popular key expires.
+
+Product: iPhone
+
+10000 users request simultaneously.
+
+Cache miss for everyone.
+
+10000 requests
+      |
+Database
+
+DB crashes.
+
+Solutions
+Request Coalescing
+
+Only one request rebuilds cache.
+
+Others wait.
+
+Req1 -> DB
+
+Req2 -> Wait
+Req3 -> Wait
+Req4 -> Wait
+Cache Warming
+
+Preload important keys.
+
+Startup
+ |
+Populate Cache
+Randomized TTL
+
+Avoid mass expiration.
+
+B. Cache Consistency
+
+Cache and DB disagree.
+
+Example:
+
+DB = ₹100
+
+Cache = ₹90
+Solutions
+
+TTL
+
+Expire every 5 mins
+
+Write Through
+
+Explicit Invalidation
+
+Update DB
+Delete Cache Key
+
+Very common interview answer.
+
+C. Hot Keys
+
+One key receives massive traffic.
+
+Example:
+
+IPL Score
+Bitcoin Price
+
+Single Redis node overloaded.
+
+Solutions
+Replicate Hot Key
+score_1
+score_2
+score_3
+
+Distribute reads.
+
+Local Server Cache
+App Cache
+
+Avoid Redis entirely.
+
+6. Redis Internals
+Why is Redis Fast?
+In Memory
+
+No disk access.
+
+Single Threaded
+
+No lock contention.
+
+No context switching.
+
+No race conditions.
+
+I/O Multiplexing
+
+Uses:
+
+epoll (Linux)
+
+One thread handles thousands of connections.
+
+Concept:
+
+Wait for events
+Process ready sockets
+
+instead of:
+
+One thread per connection
+Atomic Operations
+
+Commands execute sequentially.
+
+Example:
+
+INCR counter
+
+is atomic.
+
+No locks required.
+
+7. Redis Persistence
+
+Redis is primarily memory-based.
+
+Persistence prevents data loss.
+
+RDB (Redis Database)
+
+Snapshot-based.
+
+Memory
+ |
+Snapshot
+ |
+Disk
+
+Example:
+
+Every 5 minutes
+
+Redis forks process.
+
+Child writes snapshot.
+
+Parent continues serving traffic.
+
+Pros
+Small files
+Fast recovery
+Cons
+Recent writes may be lost
+AOF (Append Only File)
+
+Every write operation logged.
+
+Example:
+
+SET user 1
+INCR counter
+LPUSH queue x
+
+stored in file.
+
+Recovery:
+
+Load Snapshot
+Replay Operations
+Pros
+Better durability
+Cons
+Larger files
+Production
+
+Often:
+
+RDB + AOF
+
+together.
+
+8. Redis Data Structures
+String
+
+Most common.
+
+user:123
+
+Use Cases:
+
+Caching
+Counters
+Sessions
+List
+
+Ordered collection.
+
+A -> B -> C
+
+Use Cases:
+
+Queues
+Task processing
+
+Commands:
+
+LPUSH
+RPUSH
+LPOP
+Set
+
+Unique values.
+
+User IDs
+
+Use Cases:
+
+Tags
+Unique visitors
+Sorted Set (ZSET)
+
+Stores:
+
+member + score
+
+Example:
+
+Player : Score
+
+Use Cases:
+
+Leaderboards
+Rankings
+
+Very common interview answer.
+
+Hash
+User Object
+
+Example:
+
+name=Chirag
+age=28
+city=Mumbai
+
+Use Cases:
+
+User profiles
+Metadata
+Streams
+
+Redis event log.
+
+Use Cases:
+
+Messaging
+Event processing
+Kafka-lite workloads
+Bitmap
+
+Use Cases:
+
+Daily Active Users
+Feature flags
+
+Very memory efficient.
+
+HyperLogLog
+
+Approximate distinct counts.
+
+Example:
+
+Unique Visitors
+
+Uses tiny memory.
+
+9. Redis Use Cases
+Rate Limiting
+
+Most common interview question.
+
+user:123
+
+Increment request count.
+
+TTL:
+
+60 seconds
+
+Algorithm:
+
+INCR key
+EXPIRE key 60
+Messaging
+Pub/Sub
+Publisher
+ |
+Redis
+ |
+Subscribers
+
+Simple but not durable.
+
+Streams
+
+Durable messaging.
+
+Consumer groups.
+
+More production-ready.
+
+Distributed Locking
+SET lock_key value NX EX 10
+
+Used to prevent duplicate processing.
+
+Leaderboards
+
+Use:
+
+Sorted Sets
+Session Store
+user_session
+
+with TTL.
+
+Counters
+Page Views
+Likes
+Inventory
+
+using:
+
+INCR
+DECR
+
+Atomic operations.
+
+Amazon Interview Sound Bites
+When would you introduce Redis?
+
+"When the workload is read-heavy, latency-sensitive, or database throughput becomes a bottleneck."
+
+Most common cache strategy?
+
+"Cache-aside with Redis."
+
+Biggest cache challenges?
+
+"Cache consistency, thundering herd, and hot keys."
+
+Why is Redis fast?
+
+"In-memory storage, single-threaded execution model, I/O multiplexing using epoll, and lock-free atomic operations."
+
+Most important Redis data structure?
+
+"Strings for caching, Hashes for objects, Sorted Sets for leaderboards, Streams for messaging."

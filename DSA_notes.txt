@@ -1,0 +1,144 @@
+🔥 Topic 1: Sliding Window
+
+This shows up A LOT.
+
+🧠 Core Idea
+Maintain a window [l, r] and adjust it dynamically
+
+Two types:
+
+Fixed window
+Variable window
+🟢 1. Fixed Size Window
+🔥 Template
+def fixed_window(nums, k):
+    window_sum = 0
+
+    for i in range(k):
+        window_sum += nums[i]
+
+    res = window_sum
+
+    for i in range(k, len(nums)):
+        window_sum += nums[i]
+        window_sum -= nums[i - k]
+        res = max(res, window_sum)
+
+    return res
+🧠 Use when:
+window size is fixed (k)
+“subarray of size k”
+⚠️ Tricky parts
+forgetting to subtract left element
+off-by-one errors
+🟡 2. Variable Window (MOST IMPORTANT)
+🔥 Template (at most k)
+def at_most_k(nums, k):
+    l = 0
+    res = 0
+
+    for r in range(len(nums)):
+        # expand
+        add(nums[r])
+
+        while not valid():
+            remove(nums[l])
+            l += 1
+
+        res += (r - l + 1)   # count subarrays
+
+    return res
+🧠 Key insight
+number of subarrays ending at r = (r - l + 1)
+🧪 Example
+subarrays with at most k distinct
+longest substring with k distinct
+🔴 3. Exactly K Trick
+🔥 Formula
+exactly(k) = at_most(k) - at_most(k-1)
+🧠 Use when:
+“exactly k distinct”
+“exactly k odd numbers”
+🔵 4. Longest Valid Window
+🔥 Template
+def longest(nums):
+    l = 0
+    res = 0
+
+    for r in range(len(nums)):
+        add(nums[r])
+
+        while not valid():
+            remove(nums[l])
+            l += 1
+
+        res = max(res, r - l + 1)
+
+    return res
+🟣 5. Minimum Window
+🔥 Template
+def min_window(s):
+    l = 0
+    res = float('inf')
+
+    for r in range(len(s)):
+        add(s[r])
+
+        while valid():
+            res = min(res, r - l + 1)
+            remove(s[l])
+            l += 1
+
+    return res
+🧠 Key difference
+Type	While condition
+Longest	while not valid()
+Minimum	while valid()
+⚠️ MOST COMMON MISTAKES
+❌ 1. Wrong condition
+
+People confuse:
+
+expand → shrink condition
+❌ 2. Forgetting to update result in right place
+longest → after shrink
+minimum → inside shrink loop
+❌ 3. Incorrect counting
+res += (r - l + 1)
+
+This is NOT obvious — remember it.
+
+🧠 Mental Model
+Expand r → fix violation by moving l
+🔥 Patterns you must recognize
+Problem	Pattern
+Longest substring	variable window
+Subarrays count	at most k
+Minimum window	shrink when valid
+Fixed k sum	fixed window
+🧪 Must-do problems
+Longest substring without repeating
+Longest substring with k distinct
+Subarray sum ≤ k
+Count subarrays with k distinct
+Minimum window substring
+🧠 Quick Revision Sheet
+🟢 Fixed Window
+sum += nums[i]
+sum -= nums[i-k]
+🟡 Variable Window
+for r:
+    add
+    while invalid:
+        remove + l++
+🔴 Exactly K
+at_most(k) - at_most(k-1)
+🔵 Longest
+res = max(res, r-l+1)
+🟣 Minimum
+while valid:
+    update res
+    shrink
+🏁 Final takeaway
+
+Sliding window = expand right, shrink left to maintain condition

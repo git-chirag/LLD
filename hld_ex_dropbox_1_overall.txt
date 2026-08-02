@@ -1,0 +1,456 @@
+DROPBOX HLD NOTES - PART 1 (OVERALL SYSTEM DESIGN)
+1. Requirements Gathering
+Functional Requirements
+Core Features
+Upload files
+Download files
+Delete files
+Rename files
+Create folders
+Move files/folders
+Sync
+Sync files across devices
+Offline support
+Detect local changes
+Propagate remote changes
+Advanced
+Version history
+Restore previous versions
+Sharing
+Permissions
+Non Functional Requirements
+Durability
+
+Most important requirement.
+
+Never lose user data
+
+Target:
+
+11 9s durability
+
+(S3 style)
+
+Scalability
+
+Support:
+
+Billions of files
+Millions of users
+Petabytes of storage
+Availability
+
+Files should remain downloadable even during failures.
+
+Low Latency
+
+Metadata operations:
+
+<100ms
+Consistency
+
+Metadata:
+
+Strong consistency preferred
+
+File propagation:
+
+Eventual consistency acceptable
+2. Core Challenges
+
+Dropbox is NOT an upload/download problem.
+
+Main challenges:
+
+Synchronization
+
+Keeping devices consistent.
+
+Conflict Resolution
+
+Multiple offline edits.
+
+Efficient Storage
+
+Deduplication.
+
+Large Files
+
+Chunked uploads.
+
+Change Detection
+
+Detect local modifications efficiently.
+
+3. Core Entities
+User
+user_id
+name
+email
+File
+file_id
+owner_id
+path
+size
+hash
+version
+created_at
+updated_at
+Folder
+folder_id
+parent_folder_id
+owner_id
+Device
+device_id
+user_id
+last_cursor
+last_sync_time
+4. High Level Architecture
+           Client
+              |
+          Load Balancer
+              |
+         API Gateway
+              |
+ ------------------------------------------------
+ |                |               |             |
+Metadata      Sync Service   Notification   Sharing
+ Service                        Service     Service
+ |
+Metadata DB
+ |
+Object Storage (S3)
+5. Storage Design
+
+Important interview point.
+
+Never store files in database.
+
+Store:
+
+Metadata
+
+In:
+
+Postgres/MySQL
+
+Contains:
+
+file name
+owner
+version
+permissions
+
+Store:
+
+File Content
+
+In:
+
+S3
+Blob Storage
+HDFS
+
+Contains:
+
+actual bytes
+6. Metadata Database
+
+Stores:
+
+File
+Folder
+Permissions
+Versions
+Sharing
+
+Usually relational.
+
+Reason:
+
+Relationships
+Transactions
+Consistency
+7. Object Storage
+
+Stores:
+
+Videos
+Images
+Documents
+
+Requirements:
+
+Cheap
+Durable
+Highly Available
+
+Usually:
+
+Amazon S3
+GCS
+Azure Blob
+8. File Synchronization
+
+Main Dropbox problem.
+
+User edits:
+
+resume.pdf
+
+on laptop.
+
+Phone should eventually receive:
+
+updated version
+
+Synchronization should be:
+
+Incremental
+
+not:
+
+Scan all files
+
+Use:
+
+Event Bus
++
+Cursor
+
+(covered in Part 2)
+
+9. Detecting Local Changes
+
+Naive:
+
+Scan folder every few seconds
+
+Problems:
+
+CPU
+Disk I/O
+Battery
+
+Use OS File Watchers.
+
+Windows:
+
+ReadDirectoryChangesW
+
+Linux:
+
+inotify
+
+Mac:
+
+FSEvents
+
+Workflow:
+
+File Modified
+      |
+Watcher Event
+      |
+Compute Hash
+      |
+Upload Changes
+10. Versioning
+
+Every file maintains:
+
+version
+
+Example:
+
+resume.pdf
+
+v1
+v2
+v3
+
+Benefits:
+
+Sync
+Conflict Detection
+Restore Old Versions
+11. Conflict Resolution
+
+Scenario:
+
+Laptop Offline
+Phone Offline
+
+Both modify:
+
+resume.pdf
+
+Both reconnect.
+
+Problem:
+
+Two valid updates
+
+Options:
+
+Conflict Copy
+
+Dropbox approach.
+
+resume.pdf
+
+resume(conflicted copy).pdf
+Last Write Wins
+
+Simple.
+
+Not ideal.
+
+Operational Transform / CRDT
+
+Google Docs style.
+
+Too complex for Dropbox.
+
+12. Deduplication
+
+Goal:
+
+Store identical content only once.
+
+Example:
+
+Ubuntu.iso
+
+uploaded by:
+
+1000 users
+
+Store:
+
+1 copy
+
+Metadata:
+
+User A -> Hash XYZ
+
+User B -> Hash XYZ
+
+Benefits:
+
+Huge storage savings
+13. Immutable Objects
+
+Critical concept.
+
+Never modify:
+
+Object XYZ
+
+in-place.
+
+Instead:
+
+XYZ -> ABC
+
+create new object.
+
+Metadata updated.
+
+Other users still reference:
+
+XYZ
+
+This is:
+
+Copy-On-Write
+14. Security
+
+Authentication:
+
+JWT
+OAuth
+
+Authorization:
+
+Verify:
+
+User owns file
+
+before generating access.
+
+Never expose S3 publicly.
+
+Use:
+
+Presigned URLs
+
+for upload/download.
+
+15. Monitoring
+
+Track:
+
+Upload Success Rate
+Download Latency
+Sync Latency
+Storage Growth
+Failed Uploads
+
+Logs:
+
+userId
+fileId
+deviceId
+requestId
+16. Failure Handling
+Upload Interrupted
+
+Resume upload.
+
+Sync Interrupted
+
+Resume using cursor.
+
+Metadata DB Failure
+
+Replica / failover.
+
+Storage Failure
+
+Multi-region replication.
+
+Duplicate Events
+
+Idempotent processing.
+
+17. Scaling
+
+Scale independently:
+
+Metadata Service
+
+Sync Service
+
+Notification Service
+
+Store content in:
+
+Object Storage
+
+which scales naturally.
+
+Dropbox Interview Summary
+
+The hardest problems are:
+
+Synchronization
+Conflict Resolution
+Deduplication
+Versioning
+Efficient Uploads
+
+NOT:
+
+Upload file
+Download file

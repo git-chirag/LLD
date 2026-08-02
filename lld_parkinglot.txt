@@ -1,0 +1,818 @@
+Build a complete Python Parking Lot System using object-oriented design and design patterns. The goal is educational and interview preparation, not just a working solution.
+
+The implementation should be structured like a small production project and demonstrate clean architecture, SOLID principles, encapsulation, composition over inheritance, extensibility, and maintainability.
+
+Use Python 3.11+.
+
+---
+
+## PROJECT GOALS
+
+The project should be usable as a reference implementation for future LLD problems such as:
+
+* Library Management System
+* Movie Ticket Booking System
+* Vending Machine
+* Ride Sharing System
+* Hotel Booking System
+
+Therefore code quality and structure are more important than minimizing lines of code.
+
+---
+
+## FUNCTIONAL REQUIREMENTS
+
+The parking lot should support:
+
+1. Multiple floors
+2. Multiple parking spots per floor
+3. Vehicle parking
+4. Vehicle unparking
+5. Ticket generation
+6. Fee calculation
+7. Payment processing
+8. Different vehicle types:
+
+   * Car
+   * Bike
+   * Truck
+9. Spot preferences:
+
+   * EV Spot
+   * Handicap Spot
+   * Covered Spot
+10. Entrance gates
+11. Exit gates
+
+---
+
+## DESIGN REQUIREMENTS
+
+Use composition over inheritance whenever possible.
+
+Avoid enum explosion such as:
+
+EV_CAR_SPOT
+HANDICAP_CAR_SPOT
+EV_HANDICAP_CAR_SPOT
+
+Instead use:
+
+SpotFeature Enum
+and composition.
+
+Use strong encapsulation.
+
+Public APIs should be exposed through methods.
+
+Avoid directly modifying internal state.
+
+Example:
+
+GOOD:
+spot.park(vehicle)
+
+BAD:
+spot.vehicle = vehicle
+spot.is_occupied = True
+
+---
+
+## DESIGN PATTERNS
+
+1. Strategy Pattern
+
+Implement:
+
+A. SpotAssignmentStrategy
+
+Examples:
+
+* FirstAvailableStrategy
+* PreferredFloorStrategy
+* NearestEntranceStrategy
+
+B. PricingStrategy
+
+Examples:
+
+* HourlyPricingStrategy
+* WeekendPricingStrategy
+
+C. PaymentStrategy
+
+Examples:
+
+* CashPaymentStrategy
+* CardPaymentStrategy
+* UpiPaymentStrategy
+
+2. Factory Pattern
+
+Create:
+
+PaymentFactory
+
+which returns appropriate payment strategy.
+
+3. Dependency Injection
+
+Inject strategies into ParkingLot instead of creating them internally.
+
+---
+
+## DOMAIN MODEL
+
+Vehicle
+ParkingPreference
+ParkingSpot
+ParkingFloor
+Ticket
+EntranceGate
+ExitGate
+ParkingLot
+PaymentService
+
+---
+
+## RELATIONSHIPS
+
+Use relationships intentionally.
+
+Association:
+
+* ExitGate -> ParkingLot
+* EntranceGate -> ParkingLot
+
+Aggregation:
+
+* ParkingLot -> ParkingFloor
+
+Composition:
+
+* ParkingFloor -> ParkingSpot
+
+Document these relationships in comments.
+
+---
+
+## PYTHON BEST PRACTICES
+
+Use:
+
+* dataclasses for pure data objects
+* ABC for interfaces
+* type hints everywhere
+* Enums where appropriate
+* properties where appropriate
+
+Examples:
+
+Vehicle
+ParkingPreference
+Ticket
+
+can use dataclasses.
+
+Strategy interfaces should use ABC.
+
+---
+
+## THREAD SAFETY
+
+Demonstrate basic thread safety.
+
+Use:
+
+threading.Lock
+
+inside ParkingSpot.
+
+Protect critical sections:
+
+park()
+unpark()
+
+Ensure two threads cannot park two vehicles into the same spot simultaneously.
+
+Explain in comments:
+
+* what race condition is
+* why lock is required
+* limitations of in-memory lock
+* mention distributed lock and DB transactions as production alternatives
+
+Do NOT implement distributed locks.
+
+---
+
+## ERROR HANDLING
+
+Create custom exceptions:
+
+ParkingLotException
+SpotUnavailableException
+InvalidTicketException
+PaymentFailedException
+
+Use them appropriately.
+
+---
+
+## PROJECT STRUCTURE
+
+Organize code like:
+
+parking_lot/
+
+```
+models/
+    vehicle.py
+    parking_spot.py
+    parking_floor.py
+    ticket.py
+
+strategies/
+    spot_assignment.py
+    pricing.py
+    payment.py
+
+services/
+    payment_service.py
+
+gates/
+    entrance_gate.py
+    exit_gate.py
+
+exceptions/
+    exceptions.py
+
+parking_lot.py
+
+main.py
+```
+
+Avoid putting everything into a single file.
+
+---
+
+## MAIN DEMO
+
+Create a main.py demonstrating:
+
+1. Create parking lot
+2. Add floors
+3. Add spots
+4. Create entrance gate
+5. Park vehicle
+6. Generate ticket
+7. Exit through exit gate
+8. Calculate fee
+9. Process payment
+10. Free parking spot
+
+Print outputs clearly.
+
+---
+
+## DOCUMENTATION
+
+Add detailed comments explaining:
+
+* Why Strategy Pattern is used
+* Why Composition is preferred
+* Why ParkingSpot owns park/unpark behavior
+* Why ParkingLot acts as aggregate root
+* Why Gate delegates to ParkingLot
+* Where Factory Pattern is used
+* Where concurrency issues can occur
+
+---
+
+## UML
+
+Generate a UML diagram in Mermaid format in README.md showing:
+
+ParkingLot
+ParkingFloor
+ParkingSpot
+Vehicle
+Ticket
+EntranceGate
+ExitGate
+Strategies
+
+---
+
+## TESTING
+
+Create unit tests for:
+
+* Parking vehicle
+* Unparking vehicle
+* Fee calculation
+* Payment strategy selection
+* Spot assignment strategy
+
+Use pytest.
+
+---
+
+## INTERVIEW NOTES
+
+Create a separate INTERVIEW_NOTES.md containing:
+
+1. Requirement gathering discussion
+2. Why Strategy Pattern was chosen
+3. Why Composition over Inheritance
+4. Association vs Aggregation vs Composition
+5. Concurrency considerations
+6. Possible future extensions:
+
+   * Reservations
+   * Multiple entrances
+   * Nearest spot allocation
+   * Distributed locking
+   * Persistence layer
+   * Event-driven notifications
+
+This document should help someone explain the design in an Amazon LLD interview.
+
+
+Final Architecture
+                    +----------------+
+                    |  EntranceGate  |
+                    +-------+--------+
+                            |
+                            v
+                    +----------------+
+                    |   ParkingLot   |
+                    +----------------+
+                     |     |      |
+                     |     |      |
+                     v     v      v
+             SpotStrategy Ticket  PricingStrategy
+                     |
+                     v
+              ParkingFloor
+                     |
+                     v
+               ParkingSpot
+
+                    ^
+                    |
+                 Vehicle
+
+
+                    +----------------+
+                    |   ExitGate     |
+                    +-------+--------+
+                            |
+                            v
+                    +----------------+
+                    |   ParkingLot   |
+                    +----------------+
+                            |
+                            v
+                    PaymentService
+                            |
+                            v
+                    PaymentStrategy
+Enums
+VehicleType
+    CAR
+    BIKE
+    TRUCK
+
+SpotFeature
+    EV
+    HANDICAP
+    COVERED
+
+PaymentType
+    CASH
+    CARD
+    UPI
+Vehicle
+
+Vehicle is mostly a data object.
+
+@dataclass
+class ParkingPreference:
+    wants_ev: bool = False
+    wants_handicap: bool = False
+    preferred_floor: Optional[int] = None
+@dataclass
+class Vehicle:
+    vehicle_id: str
+    vehicle_type: VehicleType
+    preference: ParkingPreference
+ParkingSpot
+
+Responsibilities:
+
+Knows:
+- What type it supports
+- Current vehicle
+- Features
+- Whether occupied
+
+Does:
+- can_fit()
+- park()
+- unpark()
+class ParkingSpot:
+
+    _lock = Lock()
+
+    spot_id
+    floor_id
+
+    vehicle_type
+
+    features
+
+    vehicle
+
+    is_under_maintenance
+
+Methods:
+
+can_fit(vehicle)
+
+park(vehicle)
+
+unpark()
+
+is_occupied
+Thread Safety
+def park(self, vehicle):
+
+    with self._lock:
+
+        if not self.can_fit(vehicle):
+            raise Exception()
+
+        self.vehicle = vehicle
+
+This prevents:
+
+Two threads reserving same spot
+ParkingFloor
+
+Owns spots.
+
+Composition.
+
+class ParkingFloor:
+
+    floor_id
+
+    spots_by_type:
+        Dict[
+            VehicleType,
+            List[ParkingSpot]
+        ]
+
+Methods:
+
+add_spot()
+
+get_spots_for_type()
+Ticket
+
+Represents active parking session.
+
+@dataclass
+class Ticket:
+
+    ticket_id
+
+    vehicle
+
+    spot
+
+    entry_time
+Spot Assignment Strategy
+
+This was one of the major improvements.
+
+Instead of:
+
+ParkingLot.find_spot()
+
+we extracted:
+
+SpotAssignmentStrategy
+
+Interface:
+
+class SpotAssignmentStrategy(ABC):
+
+    def find_spot(...)
+
+Implementations:
+
+FirstAvailableStrategy
+
+PreferredFloorStrategy
+
+NearestEntranceStrategy
+
+This demonstrates:
+
+Open Closed Principle
+Pricing Strategy
+
+Another strategy pattern.
+
+Interface:
+
+class PricingStrategy(ABC):
+
+    def calculate_fee(ticket)
+
+Implementations:
+
+HourlyPricing
+
+WeekendPricing
+
+VIPPricing
+
+Example:
+
+fee =
+pricing_strategy.calculate_fee(
+    ticket
+)
+Payment Strategy
+
+Another classic Strategy Pattern.
+
+Interface:
+
+class PaymentStrategy(ABC):
+
+    def pay(amount)
+
+Implementations:
+
+UPIPayment
+
+CardPayment
+
+CashPayment
+Payment Service
+
+ParkingLot should not know:
+
+UPI logic
+Card logic
+Cash logic
+
+Instead:
+
+class PaymentService:
+
+    strategy
+
+    process_payment()
+
+Example:
+
+payment_service.process_payment(
+    amount
+)
+ParkingLot
+
+Aggregate Root.
+
+Most important class.
+
+Responsibilities:
+
+Park Vehicle
+
+Issue Ticket
+
+Unpark Vehicle
+
+Checkout
+
+Maintain Active Tickets
+
+Fields:
+
+class ParkingLot:
+
+    _floors
+
+    _strategy
+
+    _pricing_strategy
+
+    active_tickets
+
+Methods:
+
+park_vehicle()
+
+checkout()
+
+unpark_vehicle()
+
+Parking Flow:
+
+Vehicle
+  |
+  v
+ParkingLot.park_vehicle()
+
+  |
+  v
+SpotStrategy.find_spot()
+
+  |
+  v
+Spot.park()
+
+  |
+  v
+Generate Ticket
+
+  |
+  v
+Store Active Ticket
+Entrance Gate
+
+Very thin wrapper.
+
+class EntranceGate:
+
+    parking_lot
+
+Method:
+
+issue_ticket(vehicle)
+
+Implementation:
+
+return parking_lot.park_vehicle(
+    vehicle
+)
+
+Important:
+
+EntranceGate does NOT decide spots
+
+ParkingLot decides.
+
+Exit Gate
+
+Another thin wrapper.
+
+Method:
+
+checkout(
+    ticket_id,
+    payment_strategy
+)
+
+Implementation:
+
+parking_lot.checkout(
+    ticket_id,
+    payment_strategy
+)
+
+ExitGate does NOT:
+
+Calculate fees
+Unpark vehicles
+
+directly.
+
+ParkingLot orchestrates.
+
+Checkout Flow
+ExitGate
+    |
+    v
+ParkingLot.checkout()
+
+    |
+    +--> Find Ticket
+
+    |
+    +--> PricingStrategy
+
+    |
+    +--> PaymentService
+
+    |
+    +--> Spot.unpark()
+
+    |
+    +--> Remove Ticket
+Relationships
+
+This is interview gold.
+
+Association
+
+ExitGate ------ ParkingLot
+
+EntranceGate ------ ParkingLot
+
+Ticket ------ Vehicle
+
+Aggregation
+
+ParkingLot ◇------ ParkingFloor
+
+Floors can exist independently.
+
+Composition
+
+ParkingFloor ◆------ ParkingSpot
+
+Spots belong to floor.
+
+Encapsulation
+
+Public API:
+
+parking_lot.park_vehicle()
+
+parking_lot.checkout()
+
+Internal:
+
+_floors
+
+active_tickets
+
+No code should do:
+
+parking_lot._floors[0]
+
+outside the class.
+
+Concurrency
+
+For LLD level:
+
+from threading import Lock
+
+inside ParkingSpot.
+
+Critical Section:
+
+with self._lock:
+    ...
+
+Prevents:
+
+Same spot allocated twice
+Design Patterns Used
+Strategy
+Spot Assignment
+
+Pricing
+
+Payment
+Composition
+ParkingLot HAS SpotStrategy
+
+ParkingLot HAS PricingStrategy
+
+PaymentService HAS PaymentStrategy
+Aggregation
+ParkingLot HAS Floors
+Composition
+Floor HAS Spots
+Factory (Optional Extension)
+
+Could add:
+
+PaymentFactory
+
+StrategyFactory
+
+if interviewer asks.
+
+If Amazon Asks "What Would You Improve Next?"
+
+I would say:
+
+1. Multiple entrances/exits
+2. Nearest entrance strategy
+3. Reservations
+4. Display board
+5. Distributed locking
+6. Database persistence
+7. Rate limiting
+8. Event driven notifications
+
+This final design is roughly the level I'd be happy presenting in a 45-minute Amazon LLD interview. It demonstrates OOP, encapsulation, Strategy Pattern, composition-over-inheritance, thread safety, and clean responsibility separation without becoming over-engineered.

@@ -1,0 +1,531 @@
+Build a complete Python 3.11+ Elevator System using clean object-oriented design, SOLID principles, composition over inheritance, dependency injection, and proper encapsulation.
+
+This project should be production-quality and serve as a reusable Low-Level Design (LLD) reference for Amazon-style interviews.
+
+====================================================
+PROBLEM STATEMENT
+=================
+
+Design an elevator system for a building.
+
+Users can:
+
+* Press UP/DOWN button from a floor
+* Enter an elevator
+* Select destination floor
+
+The system should:
+
+* Assign hall requests to elevators
+* Schedule elevator movement efficiently
+* Handle multiple elevators
+* Support future scheduling algorithms
+
+Focus on scheduling and object-oriented design rather than UI simulation.
+
+====================================================
+DESIGN PHILOSOPHY
+=================
+
+Do NOT overengineer.
+
+Avoid:
+
+* FloorPanel
+* ElevatorPanel
+* Button
+* Display
+* Sensor
+* DoorController
+
+unless absolutely necessary.
+
+This is an LLD project, not a hardware simulation.
+
+====================================================
+FUNCTIONAL REQUIREMENTS
+=======================
+
+1. Hall Requests
+
+User can press:
+
+* UP
+* DOWN
+
+from any floor.
+
+Examples:
+
+Floor 5 UP
+Floor 10 DOWN
+
+====================================================
+
+2. Destination Requests
+
+Passenger already inside an elevator.
+
+Can select:
+
+* Destination floor
+
+Example:
+
+Go to floor 17
+
+====================================================
+
+3. Elevator Assignment
+
+System should choose the best elevator.
+
+Factors:
+
+* Current floor
+* Current direction
+* Pending requests
+* Idle status
+
+====================================================
+
+4. Elevator Movement
+
+Elevators should:
+
+* Continue serving requests in current direction
+* Reverse only after no more requests remain in that direction
+
+Use SCAN (Elevator Algorithm) behavior.
+
+====================================================
+
+5. Capacity
+
+Each elevator has:
+
+* maximum capacity
+* current load
+
+Should reject requests if overloaded.
+
+====================================================
+NON FUNCTIONAL REQUIREMENTS
+===========================
+
+* Thread-safe request handling
+* Extensible scheduling algorithms
+* Clean object-oriented design
+* Interview-friendly code
+* High readability
+
+====================================================
+IMPORTANT DESIGN DECISIONS
+==========================
+
+Use two enums:
+
+class ElevatorDirection(Enum):
+UP
+DOWN
+IDLE
+
+---
+
+class RequestType(Enum):
+HALL_UP
+HALL_DOWN
+DESTINATION
+
+====================================================
+
+Do NOT use inheritance for requests.
+
+Use:
+
+@dataclass
+class Request:
+floor: int
+request_type: RequestType
+
+Reason:
+
+Requests are primarily data containers.
+
+Inheritance introduces unnecessary complexity.
+
+====================================================
+DOMAIN MODEL
+============
+
+Request
+
+Fields:
+
+floor
+request_type
+
+====================================================
+
+ElevatorCar
+
+Fields:
+
+elevator_id
+current_floor
+direction
+capacity
+current_load
+
+up_requests
+down_requests
+
+Responsibilities:
+
+add_request()
+
+move_to_next_stop()
+
+choose_next_direction()
+
+has_pending_requests()
+
+is_overloaded()
+
+====================================================
+
+ElevatorManagerService
+
+Acts as system entry point.
+
+Fields:
+
+elevators
+scheduling_strategy
+
+Responsibilities:
+
+submit_request()
+
+assign_elevator()
+
+====================================================
+SCHEDULING STRATEGY
+===================
+
+Create:
+
+ElevatorSchedulingStrategy (ABC)
+
+Implement:
+
+NearestElevatorStrategy
+
+====================================================
+
+Strategy must consider:
+
+1. Elevator direction
+2. Relative position
+3. Idle elevators
+4. Distance
+
+Examples:
+
+GOOD candidate:
+
+Elevator at floor 3
+Moving UP
+
+Request:
+Floor 5 UP
+
+---
+
+BAD candidate:
+
+Elevator at floor 20
+Moving UP
+
+Request:
+Floor 5 UP
+
+Request lies behind elevator.
+
+====================================================
+
+Use a scoring mechanism.
+
+Choose elevator with minimum score.
+
+====================================================
+REQUEST STORAGE
+===============
+
+ElevatorCar should maintain:
+
+up_requests
+
+down_requests
+
+====================================================
+
+Use:
+
+Min Heap for UP requests
+
+Max Heap for DOWN requests
+
+====================================================
+
+Example:
+
+Current floor = 10
+
+Requests:
+
+15
+18
+4
+2
+
+Store:
+
+up_heap:
+15
+18
+
+down_heap:
+4
+2
+
+====================================================
+
+Elevator serves:
+
+10 → 15 → 18
+
+then
+
+18 → 4 → 2
+
+====================================================
+
+This implements SCAN scheduling.
+
+====================================================
+CONCURRENCY
+===========
+
+ElevatorCar owns mutable request queues.
+
+Each ElevatorCar should contain:
+
+threading.Lock
+
+Protect:
+
+* request insertion
+* request removal
+* direction updates
+
+Document race conditions.
+
+Example:
+
+Multiple hall requests arriving simultaneously.
+
+====================================================
+METHOD BEHAVIOR
+===============
+
+add_request()
+
+Should:
+
+* determine request direction relative to elevator
+* place stop in appropriate heap
+
+====================================================
+
+move_to_next_stop()
+
+Should:
+
+* choose next floor
+* update current floor
+* update direction
+
+====================================================
+
+choose_next_direction()
+
+Rules:
+
+If current direction still has pending requests:
+continue
+
+Else:
+reverse
+
+Else:
+become IDLE
+
+====================================================
+PROJECT STRUCTURE
+=================
+
+elevator_system/
+
+```
+models/
+    request.py
+    elevator_car.py
+
+strategies/
+    elevator_strategy.py
+
+services/
+    elevator_manager.py
+
+enums/
+    direction.py
+    request_type.py
+
+exceptions/
+    exceptions.py
+
+tests/
+
+main.py
+```
+
+====================================================
+CUSTOM EXCEPTIONS
+=================
+
+ElevatorException
+
+InvalidRequestException
+
+ElevatorOverloadedException
+
+====================================================
+UNIT TESTS
+==========
+
+Create tests for:
+
+* hall request assignment
+* destination request
+* nearest elevator selection
+* direction-aware assignment
+* SCAN scheduling
+* heap ordering
+* direction reversal
+* overload handling
+* concurrent requests
+
+====================================================
+MAIN DEMO
+=========
+
+Demonstrate:
+
+Scenario 1:
+Floor 5 UP
+
+---
+
+Scenario 2:
+User enters elevator
+Requests floor 12
+
+---
+
+Scenario 3:
+Multiple elevators
+
+Show scheduling strategy decision
+
+---
+
+Scenario 4:
+Direction-aware assignment
+
+---
+
+Scenario 5:
+SCAN behavior
+
+====================================================
+README
+======
+
+Generate README.md with:
+
+1. Architecture Overview
+
+2. Mermaid UML Diagram
+
+3. Request Flow
+
+Hall Request Flow:
+
+User
+→ ManagerService
+→ SchedulingStrategy
+→ ElevatorCar
+
+---
+
+Destination Request Flow:
+
+User
+→ Assigned ElevatorCar
+
+4. Why Two Heaps
+
+5. SCAN Algorithm Explanation
+
+6. Scheduling Tradeoffs
+
+7. Future Extensions
+
+====================================================
+INTERVIEW_NOTES
+===============
+
+Generate INTERVIEW_NOTES.md
+
+Cover:
+
+* Why Strategy Pattern was used
+* Why Request inheritance was avoided
+* Why heaps were chosen
+* Why ElevatorCar owns movement logic
+* Why Manager only coordinates
+* Common Amazon follow-up questions
+* Time complexity discussion
+
+====================================================
+CODE QUALITY
+============
+
+Use:
+
+* dataclasses
+* enums
+* ABC
+* dependency injection
+* type hints
+* docstrings
+
+Avoid:
+
+* giant God classes
+* unnecessary inheritance
+* unnecessary singleton pattern
+* hardware/UI simulation classes
+
+The final code should look like something a senior engineer would write and should be reusable as a template for future LLD interview problems.

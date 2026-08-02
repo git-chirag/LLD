@@ -1,0 +1,532 @@
+Build a complete Meeting Scheduler System in Python 3.11+ using clean object-oriented design, SOLID principles, composition over inheritance, proper encapsulation, thread safety, and reusable design patterns.
+
+This project is intended to be a high-quality LLD reference implementation for interview preparation (Amazon SDE2 style) and should prioritize maintainability, extensibility, and clean architecture over minimizing lines of code.
+
+---
+
+## BUSINESS CONTEXT
+
+This is an enterprise meeting room scheduling system similar to Google Calendar or Microsoft Outlook Room Scheduling.
+
+Users can create meetings, reserve meeting rooms, invite attendees, accept/decline invitations, reschedule meetings, and receive notifications.
+
+Meetings are scheduled within a single day.
+
+Recurring meetings are NOT required.
+
+Online meetings are NOT required.
+
+Focus on conference room scheduling.
+
+---
+
+## FUNCTIONAL REQUIREMENTS
+
+1. Create Meeting
+
+A user (organizer) can create a meeting by providing:
+
+* title
+* start_time
+* end_time
+* attendee list
+* required capacity
+
+System should automatically allocate an appropriate meeting room.
+
+---
+
+2. Meeting Rooms
+
+Meeting rooms contain:
+
+* room_id
+* room_name
+* capacity
+* location
+* metadata
+
+Rooms cannot be double-booked.
+
+---
+
+3. Smart Room Allocation
+
+DO NOT simply allocate the first available room.
+
+Implement Room Selection Strategies.
+
+Examples:
+
+BestFitRoomStrategy:
+
+* Choose smallest room that satisfies required capacity.
+
+NearestCapacityStrategy:
+
+* Minimize wasted seats.
+
+FirstAvailableRoomStrategy:
+
+* Simpler fallback strategy.
+
+MeetingSchedulerService should accept a RoomSelectionStrategy through dependency injection.
+
+---
+
+4. Meeting Attendees
+
+Each attendee has:
+
+* user reference
+* RSVP status
+
+RSVP statuses:
+
+* PENDING
+* ACCEPTED
+* DECLINED
+
+Attendees should expose:
+
+accept_invitation()
+decline_invitation()
+
+The RSVP state belongs to MeetingAttendee and NOT User.
+
+---
+
+5. Meeting Status
+
+Meeting should expose derived statistics:
+
+* total_attendees
+* accepted_count
+* declined_count
+* pending_count
+
+This information should be computed from attendee state.
+
+Provide helper methods such as:
+
+meeting.get_statistics()
+
+Return a MeetingStatistics object.
+
+---
+
+6. Rescheduling
+
+Organizer may reschedule a meeting.
+
+Rescheduling requires:
+
+* validating availability
+* potentially changing room
+* updating room calendars
+* notifying attendees
+
+IMPORTANT:
+
+When rescheduling:
+
+FIRST try to keep the current room.
+
+Only if current room is unavailable should the system search for another room.
+
+This reflects real-world behavior where changing rooms causes disruption.
+
+Rescheduling should be coordinated by MeetingSchedulerService and NOT Meeting itself.
+
+---
+
+7. Cancellation
+
+Organizer can cancel meeting.
+
+Cancellation should:
+
+* remove booking from calendar
+* notify attendees
+* update status
+
+---
+
+8. Notifications
+
+Send notifications for:
+
+* meeting created
+* meeting cancelled
+* meeting rescheduled
+
+Use Observer Pattern.
+
+Meeting acts as Observable.
+
+NotificationService acts as Observer.
+
+Meeting should not know implementation details of email or SMS.
+
+---
+
+9. Notification Strategies
+
+Use Strategy Pattern.
+
+Notifier interface.
+
+Implement:
+
+* EmailNotifier
+* SMSNotifier
+* SlackNotifier
+
+NotificationService should delegate to notifier strategies.
+
+---
+
+10. Daily Reset
+
+Provide support for clearing old schedules.
+
+Implement:
+
+reset_day(date)
+
+This should:
+
+* remove expired meetings
+* clean room calendars
+* archive historical meetings
+
+Create a MeetingArchive component.
+
+Do NOT simply delete historical meetings.
+
+---
+
+## NON FUNCTIONAL REQUIREMENTS
+
+* No double booking
+* Thread safe room reservation
+* O(log n) availability lookup
+* Extensible room allocation
+* Extensible notification system
+* Extensible meeting lifecycle
+
+---
+
+## DOMAIN MODEL
+
+User
+
+Meeting
+
+MeetingAttendee
+
+MeetingStatistics
+
+MeetingRoom
+
+RoomCalendar
+
+MeetingArchive
+
+MeetingSchedulerService
+
+NotificationService
+
+Notifier (interface)
+
+EmailNotifier
+
+SMSNotifier
+
+SlackNotifier
+
+RoomSelectionStrategy (interface)
+
+BestFitRoomStrategy
+
+NearestCapacityStrategy
+
+FirstAvailableRoomStrategy
+
+---
+
+## RESPONSIBILITY GUIDELINES
+
+MeetingRoom
+
+Owns:
+
+* metadata
+
+Should NOT:
+
+* create meetings
+* send notifications
+* perform scheduling logic
+
+---
+
+RoomCalendar
+
+Owns:
+
+* meeting bookings
+
+Responsibilities:
+
+* check_availability()
+* add_meeting()
+* remove_meeting()
+
+RoomCalendar owns booking state.
+
+---
+
+Meeting
+
+Owns:
+
+* meeting metadata
+* attendees
+* organizer
+* room assignment
+
+Meeting should expose domain behavior:
+
+* add_attendee()
+* remove_attendee()
+* get_statistics()
+
+Meeting should NOT coordinate room selection.
+
+---
+
+MeetingAttendee
+
+Owns:
+
+* RSVP state
+
+Responsibilities:
+
+* accept_invitation()
+* decline_invitation()
+
+---
+
+MeetingSchedulerService
+
+Acts as orchestration layer.
+
+Responsibilities:
+
+* create_meeting()
+* cancel_meeting()
+* reschedule_meeting()
+* reset_day()
+
+Coordinates multiple objects.
+
+---
+
+## CONCURRENCY
+
+Use threading.Lock.
+
+RoomCalendar should own the lock.
+
+Availability check and reservation must be atomic.
+
+Example:
+
+with self._lock:
+check_availability()
+reserve()
+
+Document race condition scenarios.
+
+Explain why lock is required.
+
+Mention distributed locking and DB transactions in comments but do not implement them.
+
+---
+
+## SCHEDULING DATA STRUCTURE
+
+RoomCalendar should maintain meetings sorted by start_time.
+
+Use binary search (bisect) for availability lookup.
+
+Target:
+
+O(log n) search
+
+Avoid O(n) full scans when possible.
+
+Document overlap detection logic.
+
+---
+
+## DESIGN PATTERNS
+
+Observer Pattern
+
+Meeting -> NotificationService
+
+---
+
+Strategy Pattern
+
+RoomSelectionStrategy
+
+Notifier Strategy
+
+---
+
+Dependency Injection
+
+Inject strategies through constructors.
+
+Avoid creating concrete implementations internally.
+
+---
+
+## PYTHON BEST PRACTICES
+
+Use:
+
+* dataclasses
+* ABC
+* Enum
+* type hints
+* properties where useful
+
+Use dataclasses for:
+
+User
+MeetingStatistics
+MeetingAttendee
+
+and other data-heavy objects.
+
+---
+
+## EXCEPTIONS
+
+Create custom exceptions:
+
+MeetingSchedulerException
+
+RoomUnavailableException
+
+MeetingNotFoundException
+
+InvalidMeetingOperationException
+
+NotificationException
+
+---
+
+## PROJECT STRUCTURE
+
+meeting_scheduler/
+
+```
+models/
+    user.py
+    meeting.py
+    attendee.py
+    statistics.py
+    meeting_room.py
+
+calendars/
+    room_calendar.py
+
+services/
+    scheduler_service.py
+    notification_service.py
+
+strategies/
+    room_selection.py
+    notifier.py
+
+archive/
+    meeting_archive.py
+
+exceptions/
+    exceptions.py
+
+main.py
+```
+
+---
+
+## MAIN DEMO
+
+Create a complete demo showing:
+
+1. Create rooms
+2. Create users
+3. Create meeting
+4. Auto room allocation
+5. RSVP responses
+6. Meeting statistics
+7. Reschedule meeting
+8. Keep same room if possible
+9. Fall back to another room if needed
+10. Cancel meeting
+11. Archive meeting
+12. Daily reset
+
+Print outputs clearly.
+
+---
+
+## TESTS
+
+Create pytest tests for:
+
+* room allocation
+* overlap detection
+* meeting creation
+* meeting cancellation
+* meeting rescheduling
+* attendee RSVP
+* meeting statistics
+* notification strategy
+* daily reset
+
+---
+
+## DOCUMENTATION
+
+Generate:
+
+README.md
+
+INTERVIEW_NOTES.md
+
+Include:
+
+* UML diagram (Mermaid)
+* Observer Pattern explanation
+* Strategy Pattern explanation
+* Composition vs Inheritance discussion
+* Association / Aggregation / Composition relationships
+* Concurrency discussion
+* Binary Search scheduling logic
+* Future extensions:
+
+  * recurring meetings
+  * timezone support
+  * online meetings
+  * distributed scheduling
+  * event-driven notifications
+  * room maintenance windows
+
+Explain all major design decisions as if preparing for an Amazon LLD interview.

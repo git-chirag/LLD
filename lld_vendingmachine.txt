@@ -1,0 +1,552 @@
+Build a complete Python 3.11+ Vending Machine System using clean object-oriented design, SOLID principles, composition over inheritance, proper encapsulation, and design patterns.
+
+This project is intended to serve as a reusable Low-Level Design (LLD) reference implementation for Amazon-style interviews.
+
+Generate production-quality code, not a toy example.
+
+====================================================
+BUSINESS CONTEXT
+================
+
+The system models a physical vending machine.
+
+Users can:
+
+* insert money
+* select product
+* receive product
+* receive change
+* cancel transaction
+
+Admin can:
+
+* add products
+* refill inventory
+* refill cash inventory
+
+====================================================
+IMPORTANT DESIGN DECISIONS
+==========================
+
+1. Use State Pattern.
+
+Machine states:
+
+* IdleState
+* HasMoneyState
+* DispensingState
+
+Do NOT create transaction states.
+
+Reason:
+
+The machine state already represents the transaction lifecycle.
+
+Avoid duplicated state tracking such as:
+
+TransactionStatus.ACTIVE
+TransactionStatus.CANCELLED
+TransactionStatus.SUCCESS
+
+These introduce synchronization issues.
+
+Transaction should be a simple data holder.
+
+====================================================
+FUNCTIONAL REQUIREMENTS
+=======================
+
+1. Insert Money
+
+User can insert denominations.
+
+Supported denominations:
+
+1
+2
+5
+10
+20
+50
+100
+200
+500
+
+Machine balance should update accordingly.
+
+====================================================
+
+2. Select Product
+
+Products are selected using slot codes.
+
+Examples:
+
+A1
+A2
+B1
+B2
+
+User can only purchase one product per transaction.
+
+====================================================
+
+3. Dispense Product
+
+After successful validation:
+
+* decrease inventory
+* return change
+* reset transaction
+* transition back to IdleState
+
+====================================================
+
+4. Cancel Transaction
+
+User may cancel before dispensing.
+
+Machine should:
+
+* refund inserted money
+* restore machine state
+* clear current transaction
+
+====================================================
+
+5. Change Handling
+
+Machine maintains cash inventory.
+
+Machine must verify:
+
+* exact change can be returned
+
+before dispensing product.
+
+If exact change cannot be returned:
+
+* reject purchase
+* allow user to cancel
+
+====================================================
+
+6. Inventory Refill
+
+Admin can:
+
+* refill product inventory
+* refill cash inventory
+
+====================================================
+NON FUNCTIONAL REQUIREMENTS
+===========================
+
+* Thread safe inventory updates
+* Extensible payment architecture
+* Extensible change calculation
+* Clean separation of concerns
+* OOP focused
+* Interview friendly
+
+====================================================
+DOMAIN MODEL
+============
+
+Product
+
+Represents a sellable item.
+
+Fields:
+
+product_id
+name
+price
+
+====================================================
+
+Slot
+
+Represents a physical vending machine slot.
+
+Fields:
+
+slot_code
+product
+quantity
+
+Responsibilities:
+
+has_stock()
+
+dispense()
+
+refill()
+
+Slot owns inventory state.
+
+Slot must contain its own threading.Lock.
+
+====================================================
+
+CashInventory
+
+Tracks available denominations.
+
+Fields:
+
+denomination_count
+
+Example:
+
+{
+100: 5,
+50: 3,
+20: 10
+}
+
+Responsibilities:
+
+add_cash()
+
+remove_cash()
+
+calculate_change()
+
+can_make_change()
+
+CashInventory owns its own lock.
+
+====================================================
+
+Transaction
+
+Represents current transaction.
+
+IMPORTANT:
+
+No transaction states.
+
+Fields:
+
+inserted_amount
+
+inserted_denominations
+
+selected_slot
+
+Responsibilities:
+
+add_money()
+
+reset()
+
+====================================================
+
+VendingMachine
+
+Aggregate root.
+
+Fields:
+
+slots
+
+cash_inventory
+
+current_transaction
+
+current_state
+
+Responsibilities:
+
+insert_money()
+
+select_product()
+
+cancel_transaction()
+
+purchase_product()
+
+change_state()
+
+====================================================
+STATE PATTERN
+=============
+
+Create abstract base class:
+
+MachineState
+
+Methods:
+
+insert_money()
+
+select_product()
+
+cancel()
+
+====================================================
+
+Concrete States
+
+IdleState
+
+HasMoneyState
+
+DispensingState
+
+====================================================
+
+Behavior Examples
+
+IdleState:
+
+allow insert_money()
+
+reject select_product()
+
+reject cancel()
+
+====================================================
+
+HasMoneyState:
+
+allow insert_money()
+
+allow select_product()
+
+allow cancel()
+
+====================================================
+
+DispensingState:
+
+reject insert_money()
+
+reject select_product()
+
+reject cancel()
+
+====================================================
+
+State objects should encapsulate behavior.
+
+Avoid large if-else chains inside VendingMachine.
+
+====================================================
+CHANGE CALCULATION
+==================
+
+Use ChangeStrategy.
+
+Create:
+
+ChangeStrategy (ABC)
+
+GreedyChangeStrategy
+
+Responsibilities:
+
+calculate_change()
+
+can_make_change()
+
+====================================================
+
+Use dependency injection.
+
+Do NOT instantiate strategies inside business classes.
+
+====================================================
+FUTURE EXTENSIBILITY
+====================
+
+Design system so future payment methods can be added.
+
+Create:
+
+PaymentStrategy (ABC)
+
+Future implementations:
+
+CashPaymentStrategy
+UPIPaymentStrategy
+CardPaymentStrategy
+
+IMPORTANT:
+
+Only CashPaymentStrategy should be implemented now.
+
+UPI/Card should be placeholders.
+
+====================================================
+CONCURRENCY
+===========
+
+Implement thread safety.
+
+Slot owns lock because it owns quantity.
+
+CashInventory owns lock because it owns denomination counts.
+
+Document race conditions in comments.
+
+Example:
+
+Two users attempting to purchase last Coke simultaneously.
+
+====================================================
+CUSTOM EXCEPTIONS
+=================
+
+Create:
+
+VendingMachineException
+
+OutOfStockException
+
+InsufficientFundsException
+
+InvalidStateException
+
+ChangeNotAvailableException
+
+InvalidSelectionException
+
+====================================================
+PROJECT STRUCTURE
+=================
+
+vending_machine/
+
+```
+models/
+    product.py
+    slot.py
+    transaction.py
+
+inventory/
+    cash_inventory.py
+
+states/
+    base_state.py
+    idle_state.py
+    has_money_state.py
+    dispensing_state.py
+
+strategies/
+    change_strategy.py
+    payment_strategy.py
+
+machine/
+    vending_machine.py
+
+exceptions/
+    exceptions.py
+
+tests/
+
+main.py
+```
+
+====================================================
+UNIT TESTS
+==========
+
+Create pytest tests for:
+
+* insert money
+* successful purchase
+* insufficient funds
+* out of stock
+* cancellation
+* change calculation
+* state transitions
+* concurrent purchase attempt
+
+====================================================
+MAIN DEMO
+=========
+
+Create an executable demo showing:
+
+1. Machine startup
+
+2. Add products
+
+3. Refill inventory
+
+4. Refill cash inventory
+
+5. Insert money
+
+6. Purchase product
+
+7. Receive change
+
+8. Cancel transaction
+
+9. Out-of-stock scenario
+
+10. Invalid selection scenario
+
+11. State transition logs
+
+====================================================
+README
+======
+
+Generate README.md containing:
+
+* architecture overview
+* class diagram (Mermaid)
+* State Pattern explanation
+* Strategy Pattern explanation
+* concurrency discussion
+* interview discussion
+* design tradeoffs
+* future extensions
+
+====================================================
+INTERVIEW NOTES
+===============
+
+Generate INTERVIEW_NOTES.md
+
+Explain:
+
+Why State Pattern was chosen.
+
+Why TransactionState was intentionally removed.
+
+Why Slot owns lock.
+
+Why CashInventory owns lock.
+
+Why VendingMachine acts as orchestrator.
+
+When PaymentStrategy should be introduced.
+
+Common interviewer follow-up questions and answers.
+
+====================================================
+CODE QUALITY
+============
+
+Use:
+
+* dataclasses where appropriate
+* type hints everywhere
+* ABC
+* Enum
+* dependency injection
+* clean docstrings
+
+Avoid:
+
+* giant God classes
+* giant if-else chains
+* global variables
+* singleton pattern
+
+The final code should be something a senior engineer would be comfortable reviewing and that can be reused as a template for future LLD interview problems.

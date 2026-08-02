@@ -1,0 +1,879 @@
+Load Balancers - HLD Interview Notes
+1. Why Do We Need a Load Balancer?
+
+Without a load balancer:
+
+Client
+  |
+Server
+
+Problems:
+
+Single point of failure
+Limited scalability
+No automatic failover
+One machine handles all traffic
+
+With a load balancer:
+
+          Load Balancer
+                |
+      -------------------
+      |        |        |
+   Server1  Server2  Server3
+
+Benefits:
+
+Traffic distribution
+High availability
+Horizontal scaling
+Fault tolerance
+Better resource utilization
+2. What Does a Load Balancer Actually Do?
+
+When a request arrives:
+
+Client
+   |
+   v
+Load Balancer
+
+LB decides:
+
+Server A ?
+Server B ?
+Server C ?
+
+based on:
+
+Round Robin
+Least Connections
+Least Response Time
+Health Status
+Weights
+
+and forwards traffic.
+
+3. L4 vs L7 Load Balancers
+
+This is one of the most important interview topics.
+
+Layer 4 (Transport Layer)
+
+Works with:
+
+TCP
+UDP
+TLS
+
+Sees:
+
+Source IP
+Destination IP
+Port
+Protocol
+
+Cannot see:
+
+GET /orders
+Host: amazon.com
+
+Examples:
+
+AWS NLB
+HAProxy TCP mode
+L4 Example
+Client
+  |
+TCP Packet
+  |
+NLB
+  |
+Backend
+
+NLB only sees:
+
+1.1.1.1 -> 52.10.10.10:443
+
+It cannot inspect:
+
+GET /orders
+Layer 7 (Application Layer)
+
+Understands:
+
+GET /orders
+Host: api.amazon.com
+
+Can route based on:
+
+URL path
+Hostname
+Cookies
+Headers
+HTTP Method
+
+Examples:
+
+AWS ALB
+NGINX
+Envoy
+L7 Example
+           ALB
+            |
+    ----------------
+    |              |
+ /orders       /users
+ Service       Service
+
+Routing rules:
+
+/orders/* → Order Service
+/users/*  → User Service
+4. AWS ALB vs NLB
+Feature	ALB	NLB
+Layer	L7	L4
+Understands HTTP	Yes	No
+TCP support	Limited	Yes
+UDP support	No	Yes
+TLS termination	Yes	Optional
+Path routing	Yes	No
+Host routing	Yes	No
+Performance	Good	Extremely high
+Kafka support	No	Yes
+Redis support	No	Yes
+5. Proxy vs Passthrough
+Proxy Mode
+
+ALB usually works like this.
+
+Client
+   |
+TCP Connection #1
+   |
+ALB
+   |
+TCP Connection #2
+   |
+Backend
+
+Two separate TCP connections.
+
+ALB becomes a TCP endpoint.
+
+This is called:
+
+TCP Termination
+What does TCP termination mean?
+
+It does NOT mean:
+
+Close connection
+
+It means:
+
+Connection ends at ALB.
+
+ALB establishes a new connection to backend.
+
+Passthrough Mode
+
+Usually used by L4 load balancers.
+
+Client
+   |
+NLB
+   |
+Backend
+
+LB forwards packets without understanding application data.
+
+No HTTP parsing.
+
+No URL inspection.
+
+6. TLS and Load Balancers
+Without TLS
+
+Client sends:
+
+GET /orders
+Authorization: xyz
+
+Anyone can read it.
+
+With TLS
+
+Client sends:
+
+Encrypted Bytes
+
+Example:
+
+8af329fa91...
+
+instead of:
+
+GET /orders
+TLS Termination
+
+Common in ALB.
+
+Client
+   |
+HTTPS
+   |
+ALB
+   |
+HTTP / HTTPS
+   |
+Backend
+
+ALB decrypts traffic.
+
+Now ALB can inspect:
+
+GET /orders
+Host: api.amazon.com
+
+and make routing decisions.
+
+Why NLB Cannot Do This
+
+NLB usually sees:
+
+TCP Packet
+Port 443
+
+but cannot see:
+
+GET /orders
+
+because payload remains encrypted.
+
+7. How Does Load Balancer Choose a Backend?
+
+The decision is typically made when the TCP connection starts.
+
+For TCP:
+
+Client
+   |
+SYN Packet
+   |
+Load Balancer
+
+LB evaluates:
+
+Health checks
+Round Robin
+Least Connections
+Weights
+
+and chooses backend.
+
+Example:
+
+ServerA = 500 connections
+ServerB = 50 connections
+ServerC = unhealthy
+
+Least Connections chooses:
+
+ServerB
+
+The entire TCP connection stays pinned to that backend.
+
+8. Load Balancing Algorithms
+Round Robin
+Req1 -> A
+Req2 -> B
+Req3 -> C
+Req4 -> A
+
+Simple.
+
+Weighted Round Robin
+A = weight 3
+B = weight 1
+
+Traffic:
+
+A A A B
+A A A B
+Least Connections
+
+Choose server with minimum active connections.
+
+Useful when requests have different durations.
+
+Least Response Time
+
+Choose server responding fastest.
+
+9. Health Checks
+
+Critical interview topic.
+
+LB periodically checks:
+
+GET /health
+
+or
+
+TCP connect
+
+Example:
+
+ServerA ❌
+ServerB ✅
+ServerC ✅
+
+Traffic goes only to:
+
+B
+C
+10. Sticky Sessions (Session Affinity)
+
+Suppose session stored in memory:
+
+ServerA
+
+Request 1:
+
+User -> A
+
+Request 2:
+
+User -> B
+
+User appears logged out.
+
+Solution:
+
+User X -> A
+User X -> A
+User X -> A
+
+called Sticky Session.
+
+Drawbacks
+Uneven load
+Harder scaling
+Harder failover
+
+Better:
+
+Redis Session Store
+
+or
+
+JWT
+11. Connection Draining
+
+During deployment:
+
+Bad:
+
+Kill Server
+
+Active requests fail.
+
+Good:
+
+Stop new traffic
+Finish existing requests
+Shutdown
+
+Called:
+
+Connection Draining
+
+or
+
+Graceful Shutdown
+12. Active-Active vs Active-Passive
+Active-Passive
+Primary
+   |
+Standby
+
+Standby receives no traffic.
+
+Used for disaster recovery.
+
+Active-Active
+ServerA
+ServerB
+ServerC
+
+All receive traffic.
+
+Most modern systems use this.
+
+13. Load Balancer as SPOF
+
+Bad:
+
+Client
+   |
+LB
+   |
+Servers
+
+If LB dies:
+
+Entire system down
+
+Solution:
+
+          DNS
+            |
+      --------------
+      |            |
+     LB1          LB2
+      |            |
+      --------------
+            |
+         Servers
+
+Multiple load balancers.
+
+14. Global Load Balancing
+
+Users:
+
+India
+US
+Europe
+
+One region isn't enough.
+
+Use:
+
+DNS
+ |
+ |-- Mumbai
+ |
+ |-- Virginia
+ |
+ |-- Frankfurt
+
+Route users to nearest healthy region.
+
+Technologies:
+
+Route53
+GeoDNS
+Anycast
+15. NAT (Network Address Translation)
+
+NAT means:
+
+Rewrite source/destination IP
+
+Example:
+
+Before:
+
+192.168.1.10 -> 8.8.8.8
+
+After NAT:
+
+49.x.x.x -> 8.8.8.8
+
+Some L4 load balancers use NAT internally when forwarding traffic.
+
+Interview Questions You Should Be Able To Answer
+Why use a load balancer?
+
+Traffic distribution, availability, scalability.
+
+Difference between ALB and NLB?
+
+L7 vs L4, HTTP-aware vs TCP/UDP-aware.
+
+What is TLS termination?
+
+Load balancer decrypts TLS traffic and becomes the TLS endpoint.
+
+Why can't NLB route /orders differently from /users?
+
+It cannot inspect HTTP payload.
+
+What are sticky sessions?
+
+Same user consistently routed to same backend.
+
+What are health checks?
+
+Periodic validation of backend health.
+
+What is connection draining?
+
+Allow active requests to finish before removing a server.
+
+How do you avoid load balancer SPOF?
+
+Multiple load balancers + DNS failover.
+
+When would you choose NLB over ALB?
+
+Kafka, Redis, databases, custom TCP/UDP protocols, ultra-low latency systems.
+
+https://samwho.dev/load-balancing/
+
+
+what is reverse proxy and api gateway
+
+Excellent. These are two concepts that appear in almost every HLD interview, and many candidates confuse them with load balancers.
+
+Big Picture
+
+Imagine:
+
+Internet
+    |
+    |
+    v
+[ Something ]
+    |
+    |
+    v
+Microservices
+
+That "Something" could be:
+
+Load Balancer
+Reverse Proxy
+API Gateway
+
+Sometimes the same product (e.g. NGINX) can act as all three.
+
+1. Reverse Proxy
+What is a Proxy?
+Forward Proxy
+Client
+  |
+Proxy
+  |
+Internet
+
+Used on the client side.
+
+Examples:
+
+Corporate proxy
+VPN
+Content filtering
+
+The server sees:
+
+Proxy
+
+instead of the real client.
+
+Reverse Proxy
+Client
+   |
+Reverse Proxy
+   |
+Backend Servers
+
+Used on the server side.
+
+Clients don't know the backend servers exist.
+
+Example:
+
+Client
+   |
+api.amazon.com
+   |
+NGINX
+   |
+Order Service
+User Service
+Payment Service
+
+The client only sees:
+
+api.amazon.com
+What does a Reverse Proxy do?
+SSL/TLS Termination
+Client
+  |
+HTTPS
+  |
+NGINX
+  |
+HTTP
+  |
+Backend
+
+Offloads encryption work.
+
+Routing
+/orders -> Order Service
+/users  -> User Service
+Caching
+
+Suppose:
+
+GET /products
+
+returns same response repeatedly.
+
+Reverse proxy can cache it.
+
+Client
+   |
+NGINX Cache
+   |
+Backend
+
+Backend load reduces.
+
+Compression
+
+Response:
+
+5 MB JSON
+
+NGINX compresses:
+
+500 KB gzip
+
+before sending.
+
+Security
+
+Can:
+
+Hide backend IPs
+Block malicious traffic
+Rate limit
+Reverse Proxy Summary
+
+Think:
+
+Reverse Proxy = Front door to backend services.
+
+2. API Gateway
+
+Now suppose you have:
+
+User Service
+Order Service
+Payment Service
+Inventory Service
+Notification Service
+
+100 microservices.
+
+Without API Gateway:
+
+Mobile App
+    |
+    +---- User Service
+    |
+    +---- Order Service
+    |
+    +---- Payment Service
+    |
+    +---- Inventory Service
+
+Nightmare.
+
+Introduce API Gateway:
+
+Client
+   |
+API Gateway
+   |
+------------------
+|       |        |
+User   Order   Payment
+What does API Gateway do?
+
+Everything a reverse proxy does PLUS application-specific features.
+
+Authentication
+
+Example:
+
+Authorization: Bearer xyz
+
+Gateway validates token.
+
+Backend services don't need to.
+
+Authorization
+
+Example:
+
+Normal User:
+  Read Orders
+
+Admin:
+  Read + Delete Orders
+
+Gateway can enforce this.
+
+Rate Limiting
+
+Example:
+
+100 requests/minute
+
+User exceeds limit:
+
+429 Too Many Requests
+
+returned by gateway.
+
+Request Aggregation
+
+Without gateway:
+
+App
+ |
+ +-> User Service
+ |
+ +-> Order Service
+ |
+ +-> Payment Service
+
+Three network calls.
+
+Gateway:
+
+App
+  |
+Gateway
+  |
+User + Order + Payment
+
+Gateway combines responses.
+
+API Transformation
+
+External API:
+
+{
+  "name":"Chirag"
+}
+
+Internal API:
+
+{
+  "userName":"Chirag"
+}
+
+Gateway can transform.
+
+Versioning
+/v1/orders
+/v2/orders
+
+Gateway manages versions.
+
+Reverse Proxy vs API Gateway
+Feature	Reverse Proxy	API Gateway
+Route Requests	✅	✅
+TLS Termination	✅	✅
+Caching	✅	✅
+Compression	✅	✅
+Authentication	⚠️ Basic	✅ Major Feature
+Authorization	⚠️ Limited	✅
+Rate Limiting	⚠️ Basic	✅
+Request Aggregation	❌	✅
+API Versioning	❌	✅
+Microservice Focus	⚠️	✅
+Load Balancer vs Reverse Proxy vs API Gateway
+Load Balancer
+
+Focus:
+
+Distribute traffic
+
+Example:
+
+Request
+  |
+LB
+  |
+Server A/B/C
+Reverse Proxy
+
+Focus:
+
+Protect and optimize backend servers
+
+Example:
+
+TLS
+Caching
+Compression
+Routing
+API Gateway
+
+Focus:
+
+Manage APIs and microservices
+
+Example:
+
+Auth
+Rate Limiting
+Aggregation
+Versioning
+Real World Example
+
+Suppose Amazon has:
+
+User Service
+Order Service
+Cart Service
+Payment Service
+
+A typical flow might be:
+
+Internet
+   |
+ALB
+   |
+API Gateway
+   |
+--------------------
+|    |     |       |
+User Cart Order Payment
+ALB
+
+Handles:
+
+Load balancing
+TLS termination
+API Gateway
+
+Handles:
+
+Authentication
+Authorization
+Rate limiting
+Routing
+Services
+
+Handle business logic.
+
+Amazon Interview Answer
+
+If asked:
+
+What is the difference between a Reverse Proxy and an API Gateway?
+
+Answer:
+
+A reverse proxy primarily sits in front of backend servers and provides routing, TLS termination, caching, compression, and security features. An API Gateway is a specialized reverse proxy designed for microservices that additionally provides authentication, authorization, rate limiting, request aggregation, API versioning, and API lifecycle management.
+
+For SDE2 interviews, that's exactly the level of understanding they expect.

@@ -1,0 +1,935 @@
+This is already a good start, but for Amazon SDE2 I'd refine it because interviewers usually don't ask:
+
+"Explain Redlock."
+
+They ask:
+
+"How would you prevent two servers from processing the same order?"
+
+"How would you ensure only one worker picks a job?"
+
+"How would you prevent duplicate payment processing?"
+
+Distributed locking becomes the solution.
+
+Distributed Locking Notes
+1. Why Do We Need Distributed Locks?
+
+Suppose:
+
+Server A
+Server B
+Server C
+
+all process the same resource.
+
+Example:
+
+Product Stock = 1
+
+Two users buy simultaneously.
+
+Without Lock
+
+Server A reads stock = 1
+
+Server B reads stock = 1
+
+Server A decrements
+
+Server B decrements
+
+Result:
+
+Stock = -1
+
+Overselling.
+
+Need:
+
+Only one server
+
+to modify shared resource at a time.
+
+What Problems Does It Solve?
+Race Conditions
+
+Two operations execute concurrently.
+
+Lost Updates
+Balance = 100
+
+T1 -> +50
+T2 -> +20
+
+One update overwrites another.
+
+Duplicate Processing
+Order Processed Twice
+Multiple Workers Picking Same Job
+Worker1
+Worker2
+
+both execute same task.
+
+What Makes Distributed Locking Different?
+
+Normal Java Lock:
+
+synchronized(lock)
+
+works only inside:
+
+Same JVM
+
+Distributed Systems:
+
+Server A
+Server B
+Server C
+
+Need lock visible to all.
+
+Properties of Good Distributed Lock
+Mutual Exclusion
+
+Only one owner.
+
+Server A owns lock
+
+Server B denied
+Fault Tolerance
+
+Server crashes.
+
+Lock should eventually release.
+
+Availability
+
+Lock service shouldn't become bottleneck.
+
+Fairness (Nice to Have)
+A waiting longer
+
+should get chance before newer requests.
+
+Not always guaranteed.
+
+Lock Lifecycle
+
+Acquire Lock
+
+lock:product123
+
+Critical Section
+
+Update Inventory
+
+Release Lock
+
+delete lock
+Biggest Interview Question
+What If Lock Owner Crashes?
+
+Example:
+
+Server A acquires lock
+
+Then:
+
+Server A crashes
+
+before release.
+
+Lock remains forever.
+
+Everything blocked.
+
+Solution:
+
+TTL
+
+Example:
+
+Lock expires after 30 sec
+Optimistic vs Pessimistic Locking
+
+Very common interview topic.
+
+Optimistic Locking
+
+Assumption:
+
+Conflicts are rare
+
+No lock initially.
+
+Read:
+
+Balance = 100
+Version = 5
+
+Update:
+
+UPDATE account
+SET balance=120,
+version=6
+WHERE version=5;
+
+If another transaction already updated:
+
+Version != 5
+
+Update fails.
+
+Retry.
+
+Advantages
+
+High throughput
+No blocking
+
+Disadvantages
+
+Retries
+
+Examples
+
+JPA @Version
+Mongo Version Field
+ETags
+Pessimistic Locking
+
+Assumption:
+
+Conflicts are common
+
+Acquire lock first.
+
+Others wait.
+
+Advantages
+
+No conflicts
+
+Disadvantages
+
+Lower throughput
+Deadlocks possible
+
+Examples
+
+SELECT ... FOR UPDATE
+Database Locking
+
+Common interview solution.
+
+Postgres
+SELECT *
+FROM inventory
+WHERE id=1
+FOR UPDATE;
+
+Locks row.
+
+Other transactions wait.
+
+Pros
+
+Simple
+
+Cons
+
+Database becomes bottleneck
+
+Works well for:
+
+Moderate scale
+
+Not ideal for:
+
+Thousands of servers
+Redis Locking
+
+Most common interview answer.
+
+SETNX
+
+Means:
+
+SET if Not Exists
+
+Acquire:
+
+SET lock:123 serverA NX EX 30
+
+Meaning:
+
+Create lock only if absent
+Expire after 30 sec
+
+Success:
+
+Lock acquired
+
+Failure:
+
+Someone already owns it
+Why TTL Is Important
+
+Without TTL:
+
+Server crashes
+
+lock remains forever.
+
+TTL guarantees recovery.
+
+Safe Unlocking
+
+Interviewers love this.
+
+Bad:
+
+DEL lock
+
+Scenario:
+
+A acquires lock
+
+TTL expires
+
+B acquires lock
+
+A wakes up
+
+DEL lock
+
+Now B's lock removed.
+
+Correct:
+
+Store owner id.
+
+lock=serverA
+
+Only owner can delete.
+
+Usually done with Lua script.
+
+Redlock
+
+Redis-based distributed lock.
+
+Single Redis:
+
+SPOF
+
+Redlock:
+
+Redis1
+Redis2
+Redis3
+Redis4
+Redis5
+
+Acquire:
+
+Majority
+
+Need:
+
+N/2 + 1
+
+Example:
+
+3 of 5
+
+Conditions
+
+Majority Acquired
+
+AND
+
+Time Taken < TTL
+
+Then lock valid.
+
+Advantages
+
+Better fault tolerance
+
+Criticism
+
+Some distributed systems experts debate its correctness under extreme failures.
+
+Amazon interviewers usually won't go that deep.
+
+Leader-Based Locking
+
+Common in distributed systems.
+
+Leader elected:
+
+Node A
+
+Only leader performs operation.
+
+Example:
+
+Scheduler
+Cron Jobs
+Metadata Updates
+
+Technologies
+
+Zookeeper
+etcd
+Consul
+ZooKeeper Locks
+
+ZooKeeper creates:
+
+Ephemeral Nodes
+
+If server dies:
+
+Node disappears
+
+Lock automatically released.
+
+Very reliable.
+
+Common in:
+
+Kafka
+Hadoop
+Distributed Systems
+etcd Locks
+
+Used heavily in Kubernetes.
+
+Supports:
+
+Lease
+Lock
+Leader Election
+
+Built on:
+
+Raft Consensus
+Quorum Concept
+
+Important interview topic.
+
+Suppose:
+
+5 nodes
+
+Need:
+
+3 approvals
+
+Formula:
+
+N/2 + 1
+
+Benefits:
+
+Survive minority failures
+Avoid split brain
+Common Failure Scenarios
+Server Crashes Holding Lock
+
+Solution:
+
+TTL
+Network Partition
+
+Server thinks:
+
+I own lock
+
+Others disagree.
+
+Need:
+
+Consensus
+Quorum
+Leader Election
+Lock Contention
+
+Thousands trying same lock.
+
+Solutions:
+
+Backoff
+Retry
+Queue
+Distributed Lock vs Queue
+
+Interview trap.
+
+Lock:
+
+Only one process executes
+
+Queue:
+
+Work distribution
+
+Sometimes queue eliminates need for lock.
+
+Example:
+
+Single Kafka Partition
+
+already guarantees sequential processing.
+
+When NOT To Use Distributed Locks
+
+Very important.
+
+Many candidates overuse locks.
+
+Instead use:
+
+Unique Constraints
+UNIQUE(order_id)
+Optimistic Locking
+
+Version field.
+
+Idempotency Keys
+
+Payment APIs.
+
+Single Partition Processing
+
+Kafka.
+
+Locks should be:
+
+Last resort
+
+because they reduce concurrency.
+
+Amazon Interview Examples
+Inventory Management
+Stock = 1
+
+Need lock or DB transaction.
+
+Distributed Cron Jobs
+
+Only one scheduler should run.
+
+Payment Processing
+
+Prevent duplicate charges.
+
+Leader Election
+
+Only one node coordinates.
+
+Quick Revision Table
+Technique	Use Case	Pros	Cons
+Optimistic Locking	Rare conflicts	Fast	Retries
+Pessimistic Locking	Frequent conflicts	Safe	Blocking
+DB Lock (FOR UPDATE)	Simple systems	Easy	DB bottleneck
+Redis SETNX	Distributed lock	Fast	Single Redis issue
+Redlock	Fault tolerant Redis lock	HA	More complexity
+ZooKeeper	Strong coordination	Reliable	Operational overhead
+etcd	Kubernetes style systems	Consensus based	Complex
+Interview Sound Bite
+
+If asked:
+
+"How would you ensure only one service processes an order?"
+
+A strong answer is:
+
+"First I'd see if I can avoid distributed locking using idempotency keys, unique constraints, or partitioned processing. If true mutual exclusion is required across multiple servers, I'd use a distributed lock, commonly Redis SET NX EX with TTL, ensuring safe lock release using ownership tokens. For stronger guarantees and fault tolerance, I'd consider ZooKeeper or etcd-based coordination."
+
+That answer sounds much more senior than immediately saying "I'll use Redis locks."
+
+can you give examples so as to when can i use idempotency keys, unique constraints or partitioned processing and in which cases true distributed locking becomes essential?
+
+This is exactly the level of thinking that separates a mid-level engineer from a senior engineer.
+
+A lot of candidates hear about distributed locks and think:
+
+Shared resource → distributed lock.
+
+In reality, experienced engineers try very hard to avoid distributed locks because they:
+
+Reduce throughput
+Introduce failure modes
+Cause contention
+Are difficult to get right
+
+Let's go through real examples.
+
+1. Idempotency Keys
+Problem
+
+User clicks:
+
+Pay ₹1000
+
+Network times out.
+
+User clicks again.
+
+Now:
+
+Payment Request 1
+Payment Request 2
+
+Both reach backend.
+
+Without protection:
+
+Charge ₹1000
+Charge ₹1000
+
+User loses ₹2000.
+
+Solution
+
+Client generates:
+
+idempotency_key = abc123
+
+Both requests carry:
+
+POST /payment
+
+Idempotency-Key: abc123
+
+Backend:
+
+Seen abc123 ?
+
+If yes:
+
+Return previous result.
+
+No duplicate processing.
+
+Why No Lock Needed?
+
+We're not protecting a shared resource.
+
+We're preventing:
+
+Same request processed twice.
+Examples
+Payment APIs
+
+Stripe uses this heavily.
+
+Order Creation
+Create Order
+
+user retries.
+
+File Upload
+
+User retries upload.
+
+Webhooks
+Payment Success
+
+may arrive multiple times.
+
+Process only once.
+
+2. Unique Constraints
+Problem
+
+User registers:
+
+email = a@b.com
+
+Two requests arrive simultaneously.
+
+Without constraint:
+
+User1 inserted
+User2 inserted
+
+Duplicate accounts.
+
+Solution
+
+Database:
+
+UNIQUE(email)
+
+Now:
+
+INSERT
+
+Second request fails automatically.
+
+Why No Lock Needed?
+
+Database already guarantees correctness.
+
+Examples
+User Registration
+UNIQUE(email)
+Order Number
+UNIQUE(order_id)
+Payment Transaction ID
+UNIQUE(transaction_id)
+Interview Tip
+
+If interviewer says:
+
+Prevent duplicate orders.
+
+First answer:
+
+Unique constraint.
+
+Not:
+
+Distributed lock.
+
+3. Partitioned Processing
+
+Very common in Kafka systems.
+
+Problem
+
+Suppose:
+
+User 123
+
+generates:
+
+Deposit
+Withdraw
+Deposit
+
+These must execute in order.
+
+Bad:
+
+Worker1
+Worker2
+Worker3
+
+processing randomly.
+
+Solution
+
+Kafka partitioning.
+
+hash(userId)%N
+
+All events for:
+
+User123
+
+go to:
+
+Partition 5
+
+Only one consumer processes Partition 5.
+
+Result:
+
+Deposit
+Withdraw
+Deposit
+
+always ordered.
+
+No lock needed.
+
+Examples
+Bank Account Events
+
+Partition by:
+
+accountId
+User Activity
+
+Partition by:
+
+userId
+Inventory Events
+
+Partition by:
+
+productId
+Example: Inventory
+
+Instead of:
+
+Server A
+Server B
+Server C
+
+all modifying:
+
+Product 123
+
+Send all Product123 events to:
+
+Partition 7
+
+Only one consumer touches inventory.
+
+No lock.
+
+When Distributed Lock Becomes Necessary
+
+Now let's look at cases where these alternatives fail.
+
+Example 1: Distributed Cron Jobs
+
+Suppose:
+
+Server A
+Server B
+Server C
+
+all run:
+
+Generate Daily Report
+
+at midnight.
+
+Without lock:
+
+Report generated 3 times.
+
+Need:
+
+Only one server executes.
+
+Distributed lock or leader election.
+
+Example 2: Inventory With Shared Database
+
+Classic interview problem.
+
+Stock = 1
+
+Two servers:
+
+Read stock = 1
+Read stock = 1
+
+Both decrement.
+
+Oversell.
+
+If partitioning not possible and updates happen directly against shared DB:
+
+Need:
+
+SELECT ... FOR UPDATE
+
+or distributed lock.
+
+Example 3: Distributed Scheduler
+
+Suppose:
+
+10 worker nodes
+
+All periodically scan:
+
+Pending invoices
+
+and process them.
+
+Need:
+
+Only one worker picks invoice.
+
+Lock often used.
+
+Though queues are usually better.
+
+Example 4: Leader Election
+
+Cluster:
+
+Node A
+Node B
+Node C
+
+Need:
+
+One leader
+
+to manage metadata.
+
+Distributed lock or consensus.
+
+Example 5: Shared External Resource
+
+Suppose:
+
+Rate limit:
+100 requests/minute
+
+to external API.
+
+20 servers calling API.
+
+Need coordination.
+
+Distributed lock may be used.
+
+Decision Framework (Interview Gold)
+
+When interviewer asks:
+
+Multiple servers modifying same thing. What will you do?
+
+Think in this order:
+
+Can database uniqueness solve it?
+UNIQUE
+
+Use that.
+
+Can idempotency solve it?
+
+Repeated requests?
+
+Use idempotency key.
+
+Can partitioning solve it?
+
+Route all updates for same entity to same consumer.
+
+Can optimistic locking solve it?
+
+Conflicts rare.
+
+Use version field.
+
+Can DB transaction solve it?
+SELECT FOR UPDATE
+Only then consider distributed lock.
+Example Amazon Might Ask
+
+Multiple users buying last item.
+
+Bad answer:
+
+Redis lock.
+
+Better answer:
+
+First I'd use a transactional update or optimistic locking at the database layer. If inventory updates are event-driven, I'd partition by product ID so only one consumer processes inventory events for a product. I'd consider distributed locking only if those approaches aren't sufficient.
+
+That's the kind of answer that sounds like an SDE2 rather than someone who memorized Redis locks.

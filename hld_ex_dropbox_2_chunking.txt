@@ -1,0 +1,720 @@
+DROPBOX HLD NOTES - PART 2
+(Chunking, Presigned URLs, Sync Engine, Event Bus, Delta Sync)
+
+This is the part where interviewers usually spend most of the time.
+
+1. Why Chunk Files?
+
+Suppose user uploads:
+
+20 GB movie.mp4
+
+Uploading as one request causes:
+
+Problems
+Network failures restart entire upload
+No parallelism
+Hard to resume
+Large memory usage
+
+Instead split file:
+
+Chunk1
+Chunk2
+Chunk3
+...
+Chunk5000
+
+Example:
+
+20 GB file
+4 MB chunks
+
+≈ 5000 chunks
+Benefits of Chunking
+Resume Upload
+
+If chunk 4999 fails:
+
+Upload only chunk 4999
+
+instead of:
+
+Upload entire 20GB again
+Parallel Upload
+
+Upload:
+
+Chunk1
+Chunk2
+Chunk3
+Chunk4
+
+simultaneously.
+
+Delta Sync
+
+Upload only changed chunks.
+
+Deduplication
+
+Store only unique chunks.
+
+2. Upload Session
+
+Important interview concept.
+
+Never start uploading directly.
+
+Step 1
+
+Client:
+
+POST /uploads
+
+Request:
+
+{
+  "fileName":"movie.mp4",
+  "size":"20GB"
+}
+
+Server:
+
+{
+  "uploadId":"abc123"
+}
+
+Metadata:
+
+uploadId = abc123
+
+status = IN_PROGRESS
+
+uploadedChunks = {}
+
+This uploadId is extremely important.
+
+3. Presigned URLs
+
+Question:
+
+How do we upload directly to S3 without exposing AWS credentials?
+
+Solution:
+
+Presigned URLs.
+
+Instead of:
+
+Client
+  |
+Backend
+  |
+S3
+
+Use:
+
+Client
+   |
+S3
+
+directly.
+
+Backend generates:
+
+Temporary Upload Permission
+
+for specific object.
+
+Example:
+
+PUT movie/chunk17
+
+valid for:
+
+15 minutes
+Important Interview Point
+
+Store:
+
+bucket
+objectKey
+
+in metadata DB.
+
+DO NOT store:
+
+Presigned URL
+
+because:
+
+It expires
+
+Generate new presigned URL whenever needed.
+
+4. Multipart Upload Flow
+
+Modern Dropbox/S3 flow.
+
+Step 1
+
+Create upload session.
+
+Receive:
+
+uploadId
+Step 2
+
+Request URLs for chunks.
+
+Example:
+
+GET /uploads/abc123/parts?parts=1,2,3
+
+Server returns:
+
+URL for chunk1
+
+URL for chunk2
+
+URL for chunk3
+Step 3
+
+Client uploads directly to S3.
+
+Step 4
+
+S3 stores:
+
+uploadId
+partNumber
+Step 5
+
+Client calls:
+
+CompleteMultipartUpload
+
+S3 assembles final object.
+
+5. Resume Upload
+
+Suppose:
+
+Chunk1 uploaded
+
+Chunk2 uploaded
+
+Chunk3 failed
+
+Connection lost.
+
+Client reconnects.
+
+Client still has:
+
+uploadId = abc123
+
+stored locally.
+
+Client asks:
+
+GET /uploads/abc123/status
+
+Response:
+
+{
+  "uploadedParts":[1,2]
+}
+
+Client uploads:
+
+3
+4
+5
+...
+
+only.
+
+No restart required.
+
+6. Resume Download
+
+Suppose:
+
+10 GB file
+
+Downloaded:
+
+6 GB
+
+before failure.
+
+Browser remembers:
+
+lastByte = 6GB
+
+Resume request:
+
+GET file
+
+Range:
+bytes=6000000000-
+
+Server returns:
+
+206 Partial Content
+
+Only remaining bytes downloaded.
+
+7. File Fingerprinting
+
+Fingerprint:
+
+SHA256(file)
+
+Purpose:
+
+Detect Changes
+Verify Integrity
+Deduplication
+
+Example:
+
+resume.pdf
+
+hash = ABC
+
+After modification:
+
+hash = XYZ
+
+Server knows:
+
+File changed
+Fingerprint vs Version
+
+Fingerprint answers:
+
+Did file change?
+
+Version answers:
+
+Which version is newer?
+
+Good systems use both.
+
+Metadata:
+
+fileId
+version
+hash
+8. File-Level Deduplication
+
+Example:
+
+Ubuntu.iso
+
+uploaded by:
+
+1000 users
+
+Hash:
+
+XYZ
+
+Store:
+
+One copy
+
+Metadata:
+
+User A -> XYZ
+
+User B -> XYZ
+
+Storage savings huge.
+
+Problem
+
+Suppose User A edits file.
+
+Will User B see changes?
+
+NO.
+
+Objects are immutable.
+
+User A edit:
+
+XYZ -> ABC
+
+Metadata:
+
+User A -> ABC
+
+User B -> XYZ
+
+This is:
+
+Copy-On-Write
+9. Block-Level Deduplication
+
+More advanced.
+
+File:
+
+Chunk1
+Chunk2
+Chunk3
+Chunk4
+
+Hashes:
+
+H1
+H2
+H3
+H4
+
+Only chunk3 changes.
+
+New:
+
+H1
+H2
+H9
+H4
+
+Server already has:
+
+H1
+H2
+H4
+
+Upload only:
+
+H9
+
+Huge bandwidth savings.
+
+10. Delta Sync
+
+One of Dropbox's most famous optimizations.
+
+Without Delta Sync:
+
+10 GB file changed
+
+Upload 10 GB
+
+With Delta Sync:
+
+Only changed blocks uploaded
+
+Example:
+
+10 GB file
+
+4 MB block changed
+
+Upload:
+
+4 MB
+
+instead of:
+
+10 GB
+11. Event Bus
+
+Most important sync concept.
+
+Problem:
+
+Phone offline.
+
+Laptop modifies files.
+
+When phone reconnects:
+
+How does it know what changed?
+
+Bad:
+
+Scan all files
+
+Good:
+
+Store events.
+
+Example:
+
+Event 1001
+
+resume.pdf updated
+Event 1002
+
+movie.mp4 deleted
+Event 1003
+
+photo.jpg uploaded
+
+Append-only stream.
+
+Can be implemented using:
+
+Kafka
+CDC Log
+Event Store
+12. Cursor
+
+Cursor means:
+
+Last processed event
+
+Phone synced until:
+
+1000
+
+Store:
+
+cursor=1000
+
+Phone reconnects.
+
+Requests:
+
+GET /changes?cursor=1000
+
+Server returns:
+
+1001
+1002
+1003
+
+Phone catches up.
+
+Update:
+
+cursor=1003
+Why Cursor Is Powerful
+
+Without cursor:
+
+Scan all files
+
+With cursor:
+
+Read only new changes
+
+Complexity:
+
+O(changes)
+
+instead of:
+
+O(total files)
+13. Sync Flow
+
+User modifies:
+
+resume.pdf
+
+File watcher detects:
+
+MODIFIED
+
+Client computes:
+
+hash
+
+Uploads changed chunks.
+
+Metadata updated.
+
+Event emitted:
+
+resume.pdf updated
+
+Phone reconnects.
+
+Phone:
+
+GET changes since cursor
+
+Receives update.
+
+Downloads changed chunks.
+
+Sync complete.
+
+14. Conflict Resolution
+
+Hardest sync problem.
+
+Initial:
+
+resume.pdf
+v10
+
+Laptop offline edits.
+
+Phone offline edits.
+
+Both reconnect.
+
+Both derived from:
+
+v10
+
+Conflict.
+
+For Dropbox:
+
+Create Conflict Copy
+
+Example:
+
+resume.pdf
+
+resume(conflicted copy).pdf
+
+User resolves manually.
+
+15. File Watchers
+
+Windows:
+
+ReadDirectoryChangesW
+
+Linux:
+
+inotify
+
+Mac:
+
+FSEvents
+
+Purpose:
+
+Instantly detect local changes
+
+without scanning entire filesystem.
+
+16. Upload Progress
+
+Track:
+
+uploadedBytes
+
+Formula:
+
+uploadedBytes
+/
+totalBytes
+
+Example:
+
+6 GB uploaded
+
+10 GB total
+
+Progress:
+
+60%
+
+Usually better than chunk count.
+
+17. Download Progress
+
+Same idea.
+
+Track:
+
+downloadedBytes
+/
+totalBytes
+
+Display:
+
+72%
+18. Metadata Storage Choices
+SQL
+
+Store:
+
+Users
+Files
+Folders
+Permissions
+Versions
+
+Reasons:
+
+Transactions
+Relationships
+Consistency
+Redis
+
+Store:
+
+Upload Sessions
+Progress
+Temporary State
+S3
+
+Store:
+
+Actual File Blocks
+Common Deep-Dive Questions
+Why chunk files?
+
+Resume, parallel uploads, delta sync.
+
+Why presigned URLs?
+
+Avoid backend becoming bottleneck.
+
+Why event bus?
+
+Efficient sync for offline devices.
+
+Why cursor?
+
+Incremental synchronization.
+
+Why fingerprints?
+
+Detect changes and deduplicate.
+
+Why versioning?
+
+Ordering and conflict detection.
+
+Why conflict copies?
+
+Cannot automatically merge PDFs/videos.
+
+Why immutable objects?
+
+Safe deduplication and copy-on-write.
+
+30-Second Dropbox Summary
+Store metadata in SQL and file contents in S3.
+
+Split files into chunks for parallel uploads, resumable uploads, deduplication and delta sync.
+
+Use presigned URLs so clients upload/download directly from S3.
+
+Maintain upload sessions using upload IDs.
+
+Detect file changes using filesystem watchers and fingerprints.
+
+Use an event bus to publish file changes and cursors for incremental synchronization.
+
+Support offline devices by replaying events since the last cursor.
+
+Use versioning and conflict copies for concurrent updates.
+
+Store immutable content objects and use copy-on-write for safe deduplication.
+
+If you can comfortably explain everything in Parts 1 and 2, you're already at a strong Amazon SDE2 level for a Dropbox/Google Drive style HLD discussion.

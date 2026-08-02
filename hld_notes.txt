@@ -1,0 +1,250 @@
+What I would do in the next 10 days
+Phase 1 (Days 1-4): HLD
+Resource
+
+Hello Interview is actually a very good choice.
+
+Focus on understanding:
+
+Fundamentals
+
+Don't jump into Netflix or Uber immediately.
+
+Learn:
+
+Load Balancer
+Reverse Proxy
+API Gateway
+Caching (Redis)
+Database Replication
+Sharding
+Message Queues (Kafka/SQS)
+CDN
+Rate Limiting
+Consistent Hashing
+
+If you don't know these building blocks, system design questions become impossible.
+
+Then do these designs
+
+In this order:
+
+1. URL Shortener
+
+Learn:
+
+Capacity estimation
+DB choice
+Cache
+Base62 encoding
+2. Rate Limiter
+
+Amazon loves this.
+
+Learn:
+
+Token Bucket
+Leaky Bucket
+Redis implementation
+3. Notification System
+
+You've already seen this in LLD.
+
+Now learn HLD version:
+
+Producers
+Kafka
+Workers
+Retry queues
+Dead Letter Queue
+4. File Processing System
+
+This is literally your project.
+
+CSV Upload
+→ Queue
+→ Workers
+→ S3
+→ Status API
+
+You should be able to design this confidently.
+
+5. E-commerce Order System
+
+Learn:
+
+Inventory management
+Concurrency
+Payment workflow
+Idempotency
+Phase 2 (Days 5-7): DSA Revision
+
+Since you're targeting Amazon SDE2, I would NOT grind random LeetCode.
+
+Focus on:
+
+Arrays & Strings
+Sliding Window
+Two Pointers
+Prefix Sum
+HashMap
+
+Very important.
+
+Trees
+
+Must know:
+
+DFS
+BFS
+LCA
+Diameter
+Graphs
+
+Must know:
+
+BFS
+DFS
+Topological Sort
+Union Find
+Heap
+
+Amazon asks heaps a lot.
+
+Dynamic Programming
+
+Just revise patterns:
+
+Knapsack
+LIS
+Grid DP
+Phase 3 (Days 8-9): LLD
+
+Revise:
+
+Patterns
+Strategy
+Observer
+Factory
+Singleton
+Decorator
+Command
+
+You already worked on most of these.
+
+Design Questions
+
+Practice:
+
+Notification System
+Payment Gateway
+Order Processing Queue
+Parking Lot
+Logger System
+Phase 4 (Day 10)
+
+Mock Interviews
+
+For every design:
+
+Practice answering:
+
+Functional Requirements
+
+What should it do?
+
+Non Functional Requirements
+
+Scale?
+Latency?
+Availability?
+
+APIs
+
+Example:
+
+POST /shorten
+GET /{shortCode}
+Database
+
+SQL or NoSQL?
+
+Why?
+
+Scaling
+
+What happens at 100x traffic?
+
+Amazon-Specific Advice
+
+For SDE2, interviewers often don't care if your final architecture is perfect.
+
+They care whether you can discuss tradeoffs.
+
+Example:
+
+Instead of saying:
+
+Use Redis.
+
+Say:
+
+I'd use Redis because reads are much more frequent than writes and low latency is important. The downside is cache invalidation and memory cost.
+
+That sounds much more senior.
+
+For your background (Oracle, Java-based work, Python-focused interviews, limited system design experience), I would prioritize:
+
+Highest ROI Topics
+Caching
+Message Queues
+Database Scaling
+Rate Limiting
+Concurrency / Idempotency
+API Design
+Your CSV Processing Project Design
+
+If you master those seven topics, you'll be in a much stronger position for an Amazon SDE2 system design round than someone who merely memorized 20 design problems.
+
+To check:
+1. How payments services work -- done
+2. Elastic search and similar other technologies -- done
+3. What does a db server actaully mean, where is the data actually stored? security
+4. How to replicate cloud services benefits like HA, Fault tolerance manually	
+5. What failures should i be worried about, should i assumes everything might fail? or any specific imp areas, how to handle failures(cron jobs?)
+Montioring health, restart after two heartbeats miss?  -- done
+6. Monitoring logging best practices, dynamic monitoring and algos for it -- done
+7. In Uber, a support ticket costs profits of many regualr tickets, so uber decides to refund anyways instead of spending labour to disucss with the user,
+similar can be said for amazon, is this a system design choice -- done
+8. Best way to store images/small videos of product inventory in amazon, what does a presinged url mean in s3, how to use s3 and be secure as well (no idor issue) --done
+9. Types of database, adv, dis adv, use cases --done
+10. Kafka deep dive
+11. CQRS
+12. Serverless vs. Containers: Understanding AWS Lambda vs. ECS/EKS trade-offs.
+13. SQL vs. NoSQL: Choosing relational (PostgreSQL) vs. non-relational (DynamoDB, MongoDB)
+14. PACELC Theorem: Understanding latency trade-offs when the system is running normally.	
+15. n+1 problem
+16. Tradeoff between various systems,
+Storage(SQL vs NoSQL vs S3 vs Graphql vs vector db)
+Caching(CDN vs Redis)
+Async vs Sync
+Token Bucket vs Leaky bucket(and other similar algo)
+TCP vs UDP
+
+ 
+Uber:
+1. JWT token, how to make sure an user does not request ride for any other user. should i not send userid in the api req body, and just take header jwt user id?
+2. How to handle location data most efficiently, what is PostGIS in postgres(quad trees) and Geohashing in redis, and do they work under the hood(uber uses hexagons)
+
+Dropbox:
+1. how does multipart form-data actually work, does it require long running connection between client and server, do the chunks have and id and ordering
+who does the stickhing of these chunks? what if i need to download only a part of a file(a few chunks) and then replace them locally, is this possible?
+2. what is operational transform, how does it work?
+3. in case of deduplication, if user modifies the file locally and then tries to upload, will we treat it as a new file? will the user get a pre-signed url?
+4. What is windows file system watcher, how to use it
+5. how exactly does resume download/upload work? who keeps track on the chunks that have already been uploaded, do we need to compare each and every chunk? what about ordering? how can we show users how much percent of file upload/download is left	
+6. to store chunks metadata which is the better choice for db, sql or no sql?
+7. Event bus with cursor, what is it? how does it help with find out of sync chunks and version control etc
+
+Youtube:
+1. Transcoding logic, streaming protocols(HLS, MPEG-DASH, ?)

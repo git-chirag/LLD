@@ -1,0 +1,693 @@
+Uber HLD Notes (Amazon / SDE2 Interview Revision)
+1. Requirements Gathering
+Functional Requirements
+Rider
+Request ride
+Cancel ride
+Track driver
+View ETA
+Make payment
+Driver
+Go online/offline
+Receive ride requests
+Accept/reject ride
+Update location
+Complete ride
+System
+Match nearby drivers
+Track ride status
+Real-time location updates
+Fare calculation
+Notifications
+Non Functional Requirements
+High Availability
+99.99%
+
+Users should always be able to request rides.
+
+Low Latency
+Driver Match < 5 sec
+Nearby Driver Search < 100 ms
+Scalability
+Millions of Riders
+Millions of Drivers
+Consistency
+
+Strong consistency required for:
+
+Ride Assignment
+Driver Assignment
+Payments
+
+Eventual consistency acceptable for:
+
+Analytics
+Recommendations
+Search
+2. Core Entities
+User
+User
+-----
+user_id
+name
+rating
+Driver
+Driver
+-------
+driver_id
+vehicle_id
+status
+
+status:
+
+AVAILABLE
+BUSY
+OFFLINE
+Ride
+Ride
+-----
+ride_id
+user_id
+driver_id
+pickup
+destination
+status
+fare
+
+status:
+
+SEARCHING
+MATCHED
+ONGOING
+COMPLETED
+CANCELLED
+Driver Location
+driver_id
+latitude
+longitude
+timestamp
+3. APIs
+Request Ride
+POST /rides
+
+Request:
+
+{
+  "pickup":"...",
+  "destination":"..."
+}
+
+Response:
+
+{
+  "rideId":"123",
+  "status":"SEARCHING"
+}
+Driver Location Update
+POST /drivers/location
+Accept Ride
+POST /rides/{rideId}/accept
+Ride Status
+GET /rides/{rideId}
+4. High Level Design
+ Rider App                     Driver App
+      |                             |
+      |                             |
+      -----------ALB----------------
+                    |
+              API Gateway
+                    |
+ --------------------------------------------------
+ |            |           |          |             |
+Ride      Driver      Matching   Payment   Notification
+Service   Service     Service    Service      Service
+                    |
+                 Redis
+               (Locations)
+                    |
+                PostgreSQL
+5. Main Problem of Uber
+
+The hardest problems are NOT:
+
+Payments
+Users
+Orders
+
+The hardest problems are:
+
+Driver Matching
+Real-time Tracking
+Nearby Driver Search
+Ride Assignment Consistency
+6. Location Tracking
+
+Drivers update location every:
+
+3-5 seconds
+
+Example
+
+1M Drivers
+
+Updating every:
+
+5 sec
+
+Produces:
+
+200K writes/sec
+Why Not Store in PostgreSQL?
+
+Problems:
+
+Massive Write Load
+UPDATE location
+
+every few seconds.
+
+Index Maintenance
+
+Latitude/longitude indexes updated continuously.
+
+Expensive Queries
+Find nearby drivers
+
+becomes costly.
+
+Recommended Design
+
+Store:
+
+Current Location
+
+in Redis.
+
+Store:
+
+Historical Trips
+
+in PostgreSQL.
+
+Architecture:
+
+Driver App
+    |
+Location Service
+    |
+Redis GEO
+7. Nearby Driver Search
+
+Question:
+
+Find nearest 10 drivers within 5 km
+
+Bad Solution
+
+SELECT *
+FROM drivers
+
+Calculate distance manually.
+
+Good Solution
+
+Use:
+
+Geohashing
+
+or
+
+H3
+
+or
+
+Redis GEO
+Geohashing
+
+Convert:
+
+Latitude
+Longitude
+
+into:
+
+te7d8f
+
+Nearby locations share prefixes.
+
+Benefits:
+
+Fast Search
+Easy Sharding
+Distributed Friendly
+
+Problems:
+
+Boundary Issues
+
+Need adjacent-cell search.
+
+H3 (Used by Uber)
+
+Developed by Uber.
+
+Uses:
+
+Hexagonal Grid
+
+instead of squares.
+
+Advantages:
+
+Better Neighbor Calculation
+Better Distance Approximation
+Better Density Analysis
+
+Used for:
+
+Nearby Search
+Heatmaps
+Demand Forecasting
+8. Ride Matching
+
+User requests ride.
+
+Ride Status = SEARCHING
+
+Matching Service:
+
+Find Nearby Drivers
+Offer Ride
+Wait Response
+Assign Driver
+Matching Flow
+Ride Request
+      |
+Matching Service
+      |
+Find Nearby Drivers
+      |
+Send Offer
+      |
+Driver Accepts
+      |
+Assign Ride
+Sequential vs Parallel Matching
+Sequential
+Ask Driver A
+
+Wait 5 sec
+
+Ask Driver B
+
+Pros:
+
+Less spam
+
+Cons:
+
+Slow
+Parallel
+Ask 3-5 Drivers
+
+Pros:
+
+Fast
+
+Cons:
+
+Multiple accepts
+
+Most systems use:
+
+Small Parallel Batch
+9. Driver Reservation
+
+Problem:
+
+Driver receives ride request.
+
+Need:
+
+Reserve Driver
+
+for:
+
+5 sec
+
+Bad Solution
+
+Store:
+
+REQUEST_SENT
+
+in DB.
+
+Need cron cleanup.
+
+Better Solution
+
+Redis TTL.
+
+Example:
+
+driver:123:pending_offer
+
+TTL:
+
+5 seconds
+
+After timeout:
+
+Redis automatically removes key
+
+No cron needed.
+
+10. Multiple Drivers Accepting Same Ride
+
+Classic Interview Question.
+
+Driver A:
+
+Accept
+
+Driver B:
+
+Accept
+
+same time.
+
+Need:
+
+Exactly One Winner
+Solution
+
+Atomic Update.
+
+Example:
+
+UPDATE rides
+SET driver_id=A,
+    status='MATCHED'
+WHERE ride_id=1
+AND status='SEARCHING'
+
+First update:
+
+1 row updated
+
+Success.
+
+Second update:
+
+0 rows updated
+
+Fails.
+
+Driver B sees:
+
+Ride Already Assigned
+11. WebSockets
+
+Why not Polling?
+
+Polling:
+
+GET /ride-status
+
+every second.
+
+For:
+
+1M riders
+
+creates huge load.
+
+WebSocket
+
+Single connection.
+
+Rider
+   |
+WebSocket
+   |
+Realtime Service
+
+Server pushes:
+
+{
+  "status":"MATCHED"
+}
+
+when needed.
+
+Use WebSockets for:
+
+Ride Status
+Driver Location
+ETA Updates
+12. Payments
+
+Usually handled by:
+
+Stripe
+PayPal
+Razorpay
+
+Flow:
+
+Ride Completed
+      |
+Payment Service
+      |
+Payment Provider
+
+Use:
+
+Webhooks
+
+for confirmation.
+
+Handle:
+
+Retries
+Idempotency
+Reconciliation
+13. Database Design
+PostgreSQL
+
+Stores:
+
+Users
+Drivers
+Rides
+Payments
+
+Reasons:
+
+ACID
+Transactions
+Consistency
+Redis
+
+Stores:
+
+Current Driver Locations
+Driver Reservations
+Session Data
+
+Reasons:
+
+Fast
+In-memory
+GEO Queries
+14. Caching
+
+Cache:
+
+Driver Profiles
+Popular Routes
+Pricing Configurations
+
+using Redis.
+
+15. Kafka Usage
+
+Use Kafka for:
+
+Ride Completed
+
+Notifications
+
+Analytics
+
+Billing
+
+Fraud Detection
+
+Avoid Kafka for:
+
+Real-time Matching
+
+because matching is latency-sensitive.
+
+16. Handling Traffic Spikes
+
+Example:
+
+Concert Ends
+
+Sudden ride requests.
+
+Solutions:
+
+Auto Scaling
+
+Scale Matching Service.
+
+Kafka Buffer
+
+Can absorb bursts.
+
+Load Shedding
+No Drivers Available
+Surge Pricing
+
+Increase price.
+
+Balances:
+
+Demand
+Supply
+17. Failure Scenarios
+Driver App Crash
+
+Heartbeat missing.
+
+Mark:
+
+OFFLINE
+Driver Stops Sending Location
+
+After:
+
+30 seconds
+
+mark unavailable.
+
+Matching Service Crash
+
+Run multiple instances.
+
+Redis Failure
+
+Fallback:
+
+No Matching
+
+or secondary Redis cluster.
+
+Payment ACK Lost
+
+Use:
+
+Webhook
+Payment Status Verification
+18. Monitoring
+
+Monitor:
+
+P95/P99 Latency
+Match Success Rate
+Ride Request QPS
+Driver Availability
+Error Rate
+Redis Latency
+Kafka Lag
+
+Logs should include:
+
+requestId
+rideId
+driverId
+userId
+
+Use:
+
+Prometheus
+Grafana
+CloudWatch
+ELK
+OpenTelemetry
+19. Security
+
+Authentication:
+
+JWT
+
+Never trust:
+
+{
+  "userId":"123"
+}
+
+from client.
+
+Take user identity from:
+
+JWT Claims
+
+Authorization:
+
+Ensure:
+
+Ride belongs to user
+
+before showing details.
+
+Interview Deep Dive Topics (Most Common)
+
+If interviewer pushes deeper, expect:
+
+1. Nearby Driver Search
+
+Geohash vs H3 vs PostGIS
+
+2. Real-Time Location Updates
+
+WebSockets
+
+3. Multiple Driver Acceptance
+
+Optimistic Locking
+
+4. Driver Reservation
+
+Redis TTL
+
+5. Scaling To Millions
+
+Redis GEO + Partitioning
+
+6. Surge Pricing
+
+Demand/Supply balancing
+
+7. Failure Handling
+
+Retries
+Timeouts
+Heartbeats
+Reconciliation
+
+30-Second Uber Summary
+Store current driver locations in Redis GEO/H3.
+Use Matching Service to find nearby drivers.
+Reserve drivers using Redis TTL-based offers.
+Use atomic updates to ensure exactly one driver gets assigned.
+Use WebSockets for real-time ride and location updates.
+Store ride/payment history in PostgreSQL.
+Use Kafka for notifications, billing, analytics and other asynchronous workflows.
+Handle failures with retries, heartbeats, monitoring and reconciliation jobs.
+
+If you can comfortably explain every section above, you're already discussing Uber HLD at roughly the level expected in a strong SDE2 interview.

@@ -1,0 +1,232 @@
+Concurrency:
+🧠 1. What are Isolation Levels?
+
+Isolation levels define how visible a transaction’s changes are to other concurrent transactions.
+
+There are 4 standard isolation levels (ANSI SQL). Each provides a trade-off between consistency and performance.
+
+Isolation Level	Prevents	Still Possible	Notes
+Read Uncommitted	—	Dirty Read, Non-Repeatable Read, Phantom Read	Fastest, least safe
+Read Committed	Dirty Read	Non-Repeatable Read, Phantom Read	Most common (default in PostgreSQL, Oracle)
+Repeatable Read	Dirty Read, Non-Repeatable Read	Phantom Read	Default in MySQL (InnoDB)
+Serializable	All	—	Safest, but slowest
+
+🔍 What these terms mean
+Term	Meaning
+Dirty Read	Read uncommitted data from another transaction.
+Non-Repeatable Read	Same query gives different results within one transaction because another transaction updated rows in between.
+Phantom Read	A range query gives new rows because another transaction inserted rows in between.
+
+🟩 Optimistic Concurrency Control (OCC)
+
+Assumes: “Conflicts are rare — let everyone work, and verify before commit.”
+
+🔧 How it works:
+
+Each row has a version or last_updated_time field.
+
+Read data → modify it locally.
+
+Before UPDATE, check if the version is still same.
+
+If not → conflict detected → retry or abort.
+
+Example SQL:
+UPDATE products
+SET quantity = quantity - 1, version = version + 1
+WHERE product_id = 1 AND version = 10;
+
+
+If this updates 0 rows → another transaction already changed it.
+
+🔒 Isolation Level:
+
+Typically works under Read Committed or Repeatable Read.
+
+Relies on application-level version checking rather than DB locks.
+
+✅ Pros:
+
+High throughput, non-blocking.
+
+Great for systems with low contention.
+
+⚠️ Cons:
+
+Retry logic needed.
+
+Can fail under high contention.
+
+🟥 Pessimistic Concurrency Control (PCC)
+
+Assumes: “Conflicts are likely — lock data early.”
+
+🔧 How it works:
+
+Lock the record when it’s read (e.g. SELECT ... FOR UPDATE).
+
+Hold the lock until transaction commits/rolls back.
+
+🔒 Isolation Level:
+
+Usually requires Repeatable Read or Serializable.
+
+DB ensures one transaction gets exclusive access.
+
+✅ Pros:
+
+Ensures consistency, no retries.
+
+Good for high-value updates (e.g., financial transactions).
+
+⚠️ Cons:
+
+Slower, more blocking.
+
+Deadlocks possible.
+
+💬 3. Common Concurrency Questions in Interviews
+
+Here’s what they might ask you — categorized by HLD and LLD:
+
+🧩 A. HLD-Level Questions (System Design)
+Type	Example Questions	What They’re Testing
+Inventory Race Conditions	“How do you ensure only one user buys the last product?”	Understanding of DB locking, OCC vs PCC
+Wallet / Balance Update	“Two transactions withdraw from same account at once — how do you ensure balance never goes negative?”	Use of transactions + isolation
+Distributed Systems	“What if you have multiple service instances — how do you ensure synchronization?”	Use of distributed locks (Redis, ZooKeeper)
+Eventual Consistency	“Can you allow slightly stale reads?”	CAP theorem understanding
+Idempotency	“What if the same request comes twice?”	Safe design of APIs with request IDs
+Concurrency in Queues / Workers	“How do you prevent multiple workers processing same message?”	Use of visibility timeout or DB locks
+
+🧩 What is SELECT ... FOR UPDATE?
+
+SELECT ... FOR UPDATE is a SQL statement that reads one or more rows and locks them so that no other transaction can modify or acquire locks on those same rows until your transaction completes (either COMMIT or ROLLBACK).
+
+It’s part of pessimistic locking — the idea is:
+
+"Assume conflict will happen, so lock the data before someone else changes it."
+
+💡 Example Scenario
+
+Imagine you have a table:
+
+CREATE TABLE products (
+    product_id INT PRIMARY KEY,
+    name VARCHAR(50),
+    quantity INT
+);
+
+
+And there’s one iPhone left:
+
+product_id	name	quantity
+1	iPhone	1
+
+Now, two users try to buy it at the same time.
+
+❌ Without Locking
+
+If both run this at the same time:
+
+SELECT quantity FROM products WHERE product_id = 1;
+
+
+Both see quantity = 1.
+
+Then both run:
+
+UPDATE products SET quantity = quantity - 1 WHERE product_id = 1;
+
+
+✅ Both succeed (quantity becomes -1).
+💥 Inconsistent state!
+
+✅ With SELECT ... FOR UPDATE
+
+In a transaction (say User A):
+
+BEGIN;
+
+SELECT quantity 
+FROM products 
+WHERE product_id = 1 
+FOR UPDATE;
+
+
+→ This locks the row in the products table.
+
+Now if User B tries the same query:
+
+SELECT quantity 
+FROM products 
+WHERE product_id = 1 
+FOR UPDATE;
+
+
+User B’s transaction waits (is blocked) until User A commits or rolls back.
+
+Then A can safely do:
+
+UPDATE products SET quantity = quantity - 1 WHERE product_id = 1;
+COMMIT;
+
+
+Only after A commits, B’s query continues — at which point B will see quantity = 0 and can handle “out of stock”.
+
+⚙️ Typical Flow in a Transaction
+BEGIN;
+
+-- Lock the product row
+SELECT quantity FROM products WHERE product_id = 1 FOR UPDATE;
+
+-- Check availability
+IF quantity > 0 THEN
+    UPDATE products SET quantity = quantity - 1 WHERE product_id = 1;
+ELSE
+    RAISE ERROR 'Out of stock';
+END IF;
+
+COMMIT;
+
+
+✅ This guarantees only one user can modify the stock at a time.
+
+🧠 When to Use
+
+Use FOR UPDATE when:
+
+You’re modifying inventory, balances, or counts.
+
+You must ensure strong consistency (no two users can modify the same row simultaneously).
+
+You’re okay with waiting (locking) rather than retrying.
+
+⚠️ Trade-offs
+Aspect	FOR UPDATE (Pessimistic)	Optimistic Locking
+Lock Type	Locks the row immediately	Checks version before update
+Performance	Slower, more blocking	Faster, retries on conflict
+Use Case	Banking, inventory	High concurrency apps
+🧩 Example in Java (JDBC)
+Connection conn = dataSource.getConnection();
+conn.setAutoCommit(false);
+
+PreparedStatement ps = conn.prepareStatement(
+    "SELECT quantity FROM products WHERE product_id = ? FOR UPDATE"
+);
+ps.setInt(1, 1);
+ResultSet rs = ps.executeQuery();
+
+if (rs.next()) {
+    int qty = rs.getInt("quantity");
+    if (qty > 0) {
+        PreparedStatement update = conn.prepareStatement(
+            "UPDATE products SET quantity = quantity - 1 WHERE product_id = ?"
+        );
+        update.setInt(1, 1);
+        update.executeUpdate();
+        conn.commit();
+    } else {
+        conn.rollback();
+        throw new RuntimeException("Out of stock");
+    }
+}/;l.jn hgbfvdcs
